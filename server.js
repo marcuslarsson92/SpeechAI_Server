@@ -3,7 +3,7 @@ import express from 'express';
 import multer from 'multer';
 import { SpeechClient } from '@google-cloud/speech';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
-import openai from 'openai';
+import OpenAI from 'openai';
 import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
@@ -12,14 +12,10 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const upload = multer();
-
+const openai = new OpenAI();
 const speechClient = new SpeechClient();
 const ttsClient = new TextToSpeechClient();
 
-const openaiConfig = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-const openai = new OpenAIApi(openaiConfig);
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   try {
