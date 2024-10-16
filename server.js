@@ -73,7 +73,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
         languageCode: 'sv-SE',
         ssmlGender: 'NEUTRAL',
       },
-      audioConfig: { audioEncoding: 'mp3' },
+      audioConfig: { audioEncoding: 'MP3' },
     });
 
     res.set('Content-Type', 'audio/mp3');
