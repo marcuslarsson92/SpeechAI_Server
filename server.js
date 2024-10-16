@@ -1,27 +1,30 @@
 import 'dotenv/config';
 import express from 'express';
 import multer from 'multer';
-import { SpeechClient } from '@google-cloud/speech';
+import speech from '@google-cloud/speech';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import OpenAI from 'openai';
 import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
+import { Readable } from 'stream';
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const upload = multer();
 const openai = new OpenAI();
-const speechClient = new SpeechClient();
 const ttsClient = new TextToSpeechClient();
-
+const speechClient = new speech.SpeechClient({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+});
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+  let tempAudioPath = 'temp_audio.webm';
+  let convertedAudioPath = 'converted_audio.wav';
+
   try {
     // Spara och konvertera ljudfilen
-    const tempAudioPath = 'temp_audio.webm';
-    const convertedAudioPath = 'converted_audio.wav';
     fs.writeFileSync(tempAudioPath, req.file.buffer);
 
     await new Promise((resolve, reject) => {
@@ -42,8 +45,8 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
-        sampleRateHertz: 48000,
-        languageCode: 'sv-SE', // Anpassa språk
+        sampleRateHertz: 44100, 
+        languageCode: 'sv-SE', 
       },
     });
 
@@ -54,22 +57,23 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     console.log('Transkription:', transcription);
 
     // Skicka transkriptionen till OpenAI
-    const chatResponse = await openai.createChatCompletion({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: transcription }],
+    const chatResponse = await openai.chat.completions.create({
+
+      messages: [{ role: 'system', content: transcription }],
+      model: 'gpt-4o',
     });
 
-    const replyText = chatResponse.data.choices[0].message.content;
+    const replyText = chatResponse.choices[0];
     console.log('GPT-4 Svar:', replyText);
 
     // Konvertera svaret till tal med Google Text-to-Speech
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
       input: { text: replyText },
       voice: {
-        languageCode: 'es-ES', // Anpassa språk
+        languageCode: 'sv-SE',
         ssmlGender: 'NEUTRAL',
       },
-      audioConfig: { audioEncoding: 'MP3' },
+      audioConfig: { audioEncoding: 'mp3' },
     });
 
     res.set('Content-Type', 'audio/mp3');
@@ -78,8 +82,12 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     console.error('Fel vid bearbetning:', error);
     res.status(500).send('Serverfel');
   } finally {
-    fs.unlinkSync(tempAudioPath);
-    fs.unlinkSync(convertedAudioPath);
+    if (fs.existsSync(tempAudioPath)) {
+      fs.unlinkSync(tempAudioPath);
+    }
+    if (fs.existsSync(convertedAudioPath)) {
+      fs.unlinkSync(convertedAudioPath);
+    }
   }
 });
 
