@@ -1,0 +1,35 @@
+version: "3.8"
+services:
+  server:
+    image: server
+    ports:
+      - 8080:3000
+    volumes:
+      - . :/app/src
+    environment:
+      DATABASE_HOST: database
+    depends_on:
+      - database
+
+  gui:
+    image: gui
+    volumes:
+      - . :/app/src    
+    environment:
+      DATABASE_HOST: database
+    depends_on:
+      - database
+      
+  database:
+    image: cylim/firebase
+    restart: always
+    command: --quiet --syslog
+    expose:
+      - "27017"
+    volumes:
+      - database-data:/data/db
+      - firebase-config:/data/configdb
+
+volumes:
+  database-data:
+  firebase-config:
