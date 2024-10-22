@@ -18,10 +18,23 @@ const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
+const admin = require("firebase-admin");
+
+const serviceAccount = require("/Users/nicke/Keys/apikeysdatabase.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://speechai-ec400-default-rtdb.europe-west1.firebasedatabase.app"
+});
+
+const db = admin.database();
+const ref = db.ref('transcriptions');  // Create a reference to the "transcriptions" node
+
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
+
 
   try {
     // Spara och konvertera ljudfilen
@@ -65,6 +78,15 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     // Extrahera GPT-4-svaret (endast textinnehållet)
     const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
+
+    //Spara transkiptionen till Databasen
+    const dbRef = admin.database().ref('transcriptions');
+    const newTranscriptionRef = dbRef.push();  // Create a new node for each transcription
+    await newTranscriptionRef.set({
+    transcription : transcription,
+    gpt4Response : replyText,
+    timestamp : new DataTransfer().toISOString,
+    });
 
     // Konvertera svaret till tal med Google Text-to-Speech
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
