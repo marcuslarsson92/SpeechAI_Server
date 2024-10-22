@@ -45,7 +45,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
-        sampleRateHertz: 44100, 
+        sampleRateHertz: 48000, 
         languageCode: 'sv-SE', 
       },
     });
@@ -58,17 +58,17 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 
     // Skicka transkriptionen till OpenAI
     const chatResponse = await openai.chat.completions.create({
-
       messages: [{ role: 'system', content: transcription }],
       model: 'gpt-4o',
     });
 
-    const replyText = chatResponse.choices[0];
+    // Extrahera GPT-4-svaret (endast textinnehållet)
+    const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
 
     // Konvertera svaret till tal med Google Text-to-Speech
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
-      input: { text: replyText },
+      input: { text: replyText },  // Skicka endast texten här
       voice: {
         languageCode: 'sv-SE',
         ssmlGender: 'NEUTRAL',
@@ -76,6 +76,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audioConfig: { audioEncoding: 'MP3' },
     });
 
+    // Skicka tillbaka ljudet som svar
     res.set('Content-Type', 'audio/mp3');
     res.send(ttsResponse.audioContent);
   } catch (error) {
