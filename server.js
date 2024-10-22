@@ -8,6 +8,7 @@ import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import { Readable } from 'stream';
+import admin from 'firebase-admin'; // Changed from require to import
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -18,17 +19,17 @@ const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
-const admin = require("firebase-admin");
 
-const serviceAccount = require("/Users/nicke/Keys/apikeysdatabase.json");
+const serviceAccount = JSON.parse(fs.readFileSync('/Users/nicke/Keys/apikeysdatabase.json', 'utf8'));
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://speechai-ec400-default-rtdb.europe-west1.firebasedatabase.app"
 });
 
+
 const db = admin.database();
-const ref = db.ref('transcriptions');  // Create a reference to the "transcriptions" node
+const ref = db.ref('Transcriptions');  // Create a reference to the "transcriptions" node
 
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
@@ -80,12 +81,16 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     console.log('GPT-4 Svar:', replyText);
 
     //Spara transkiptionen till Databasen
-    const dbRef = admin.database().ref('transcriptions');
+    const dbRef = admin.database().ref('Transcriptions');
     const newTranscriptionRef = dbRef.push();  // Create a new node for each transcription
     await newTranscriptionRef.set({
     transcription : transcription,
     gpt4Response : replyText,
     timestamp : new DataTransfer().toISOString,
+    }).then(() => {
+    console.log('Data successfully written to Firebase!');
+    }).catch((error) => {
+    console.error('Error writing data to Firebase:', error);
     });
 
     // Konvertera svaret till tal med Google Text-to-Speech
