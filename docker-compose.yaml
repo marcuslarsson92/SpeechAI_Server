@@ -1,0 +1,17 @@
+services:
+  client:
+    image: client
+    ports:
+      - 8080:3000
+    volumes:
+      - ../Speech-AI-client/src:/app/src    
+
+  server:
+    image: server
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - .env
+
+
+
