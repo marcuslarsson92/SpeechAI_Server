@@ -21,7 +21,7 @@ const speechClient = new speech.SpeechClient({
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
-  let convertedAudioPath = 'converted_audio.wav';
+  let convertedAudioPath = 'converted_audio.mp3';
 
   try {
     // Spara och konvertera ljudfilen
@@ -30,8 +30,8 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     await new Promise((resolve, reject) => {
       ffmpeg(tempAudioPath)
         .output(convertedAudioPath)
-        .audioCodec('pcm_s16le')
-        .format('wav')
+        .audioCodec('libmp3lame')
+        .format('mp3')
         .on('end', resolve)
         .on('error', reject)
         .run();
@@ -44,7 +44,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
-        encoding: 'LINEAR16',
+        encoding: 'MP3',
         sampleRateHertz: 48000, 
         languageCode: 'sv-SE', 
       },
