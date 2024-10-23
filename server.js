@@ -35,8 +35,6 @@ const ref = db.ref('Transcriptions');  // Create a reference to the "transcripti
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
-
-
   try {
     // Spara och konvertera ljudfilen
     fs.writeFileSync(tempAudioPath, req.file.buffer);
@@ -80,13 +78,13 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
 
-    //Spara transkiptionen till Databasen
+    //Spara transkriberingen till Databasen
     const dbRef = admin.database().ref('Transcriptions');
     const newTranscriptionRef = dbRef.push();  // Create a new node for each transcription
     await newTranscriptionRef.set({
     transcription : transcription,
-    gpt4Response : replyText,
-    timestamp : new DataTransfer().toISOString,
+    gpt4response : replyText,
+    timestamp : new Date().toISOString(),
     }).then(() => {
     console.log('Data successfully written to Firebase!');
     }).catch((error) => {
