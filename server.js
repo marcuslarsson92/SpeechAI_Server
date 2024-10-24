@@ -181,75 +181,262 @@ app.get('/get-all-users', async (req, res) => {
   }
 });
 
+// Function to save conversation in Firebase
+async function saveConversation(userId, prompt, answer, promptAudioURL = '', answerAudioURL = '') {
+  if (!userId) {
+      userId = 'Guest';
+  }
+
+  // Reference to the user's conversations
+  const conversationsRef = db.ref(`Conversations/${userId}`);
+
+  // Check if the last conversation is ongoing (not ended)
+  const ongoingConversationSnapshot = await conversationsRef.orderByChild('Ended').equalTo(false).limitToLast(1).once('value');
+  let conversationId;
+  let conversationData;
+
+  // If an ongoing conversation exists
+  if (ongoingConversationSnapshot.exists()) {
+      const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
+      conversationData = ongoingConversationSnapshot.val()[conversationKey];
+      conversationId = conversationKey;
+
+      // Add the new prompt and answer to the existing conversation
+      conversationData.PromptsAndAnswers.push({ Prompt: prompt, Answer: answer, PromptAudioURL: promptAudioURL, AnswerAudioURL: answerAudioURL });
+      
+      // Save the updated conversation
+      await db.ref(`Conversations/${userId}/${conversationId}`).update(conversationData);
+  } else {
+      // No ongoing conversation, create a new one
+      conversationId = generateId();
+      conversationData = {
+          PromptsAndAnswers: [{ Prompt: prompt, Answer: answer, PromptAudioURL: promptAudioURL, AnswerAudioURL: answerAudioURL }],
+          Date: new Date().toISOString(),
+          Ended: false  // New conversation, not ended
+      };
+
+      // Save the new conversation
+      await db.ref(`Conversations/${userId}/${conversationId}`).set(conversationData);
+  }
+
+  return conversationId; // Return conversation ID for reference if needed
+}
+
+// Function to end the conversation
+async function endConversation(userId) {
+  if (!userId) {
+      userId = 'Guest';
+  }
+
+  const conversationsRef = db.ref(`Conversations/${userId}`);
+
+  // Find the ongoing conversation and mark it as ended
+  const ongoingConversationSnapshot = await conversationsRef.orderByChild('Ended').equalTo(false).limitToLast(1).once('value');
+  if (ongoingConversationSnapshot.exists()) {
+      const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
+      await db.ref(`Conversations/${userId}/${conversationKey}`).update({ Ended: true, EndedAt: new Date().toISOString() });
+      console.log(`Conversation ${conversationKey} for user ${userId} ended.`);
+  }
+}
+
+// GET endpoint to fetch all conversations for a specific user by userId (or "Guest")
+app.get('/get-user-conversations/:userId', async (req, res) => {
+  const userId = req.params.userId || 'Guest'; // Default to "Guest" if no userId is provided
+
+  try {
+    const conversationsRef = db.ref(`Conversations/${userId}`);
+    
+    // Fetch all conversations for the user
+    const snapshot = await conversationsRef.once('value');
+    
+    if (snapshot.exists()) {
+      const conversationsData = snapshot.val();
+
+      // Convert the conversations object to an array of conversations
+      const conversationsList = Object.entries(conversationsData).map(([conversationId, conversation]) => ({
+        PromptsAndAnswers: conversation.PromptsAndAnswers, // Return all prompt-answer pairs
+        Date: conversation.Date  // Return the conversation's date
+      }));
+
+      // Send the list of conversations back to the client
+      res.status(200).send(conversationsList);
+    } else {
+      res.status(404).send({ message: 'No conversations found for this user.' });
+    }
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+
+// GET endpoint to fetch all conversations for all users
+app.get('/get-all-conversations', async (req, res) => {
+  try {
+    const conversationsRef = db.ref('Conversations');
+
+    // Fetch all users and their conversations
+    const snapshot = await conversationsRef.once('value');
+
+    if (snapshot.exists()) {
+      const allConversationsData = snapshot.val();
+      
+      // List to hold all users and their conversations
+      let allConversationsList = [];
+
+      // Loop through each user (including "Guest" if they exist)
+      Object.entries(allConversationsData).forEach(([userId, userConversations]) => {
+        let userConvoList = {
+          UserId: userId,   
+          Conversations: [] // List to hold all conversations for this user
+        };
+
+        // Loop through each conversation for this user
+        Object.entries(userConversations).forEach(([conversationId, conversation]) => {
+          userConvoList.Conversations.push({
+            ConversationId: conversationId, 
+            PromptsAndAnswers: conversation.PromptsAndAnswers,    
+            Date: conversation.Date         
+          });
+        });
+
+        // Add this user's conversations to the main list
+        allConversationsList.push(userConvoList);
+      });
+
+      // Send the list of all users and their conversations back to the client
+      res.status(200).send(allConversationsList);
+    } else {
+      res.status(404).send({ message: 'No conversations found in the database.' });
+    }
+  } catch (error) {
+    console.error('Error fetching all conversations:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+
+// POST endpoint to fetch conversations by userId (optional) and a date interval
+app.post('/get-conversations', async (req, res) => {
+  const { userId, startDate, endDate } = req.body; 
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  try {
+    // If userId is provided, fetch only conversations for that user (or "Guest")
+    const conversationsRef = userId
+      ? db.ref(`Conversations/${userId}`)
+      : db.ref('Conversations'); // Fetch all conversations if no userId
+
+    const snapshot = await conversationsRef.once('value');
+
+    if (snapshot.exists()) {
+      const allConversationsData = snapshot.val();
+
+      let result = [];
+
+      // Loop through all users (or a single user if userId is provided)
+      Object.entries(allConversationsData).forEach(([currentUserId, userConversations]) => {
+        let userConvoList = {
+          UserId: currentUserId,
+          Conversations: []
+        };
+
+        // Loop through the conversations for the current user
+        Object.entries(userConversations).forEach(([conversationId, conversation]) => {
+          const conversationDate = new Date(conversation.Date);
+
+          // Check if the conversation's date is within the specified range
+          if (conversationDate >= start && conversationDate <= end) {
+            userConvoList.Conversations.push({
+              ConversationId: conversationId,
+              PromptsAndAnswers: conversation.PromptsAndAnswers,
+              Date: conversation.Date
+            });
+          }
+        });
+
+        // Add this user's conversations to the result if they have any matching the date range
+        if (userConvoList.Conversations.length > 0) {
+          result.push(userConvoList);
+        }
+      });
+
+      // Send the filtered list of conversations back to the client
+      res.status(200).send(result);
+    } else {
+      res.status(404).send({ message: 'No conversations found.' });
+    }
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+// POST endpoint to handle incoming audio processing and conversation logic
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
+  const userId = req.body.userId;
 
   try {
-    // Spara och konvertera ljudfilen
-    fs.writeFileSync(tempAudioPath, req.file.buffer);
+      // Save and convert the audio file
+      fs.writeFileSync(tempAudioPath, req.file.buffer);
+      await new Promise((resolve, reject) => {
+          ffmpeg(tempAudioPath)
+              .output(convertedAudioPath)
+              .audioCodec('pcm_s16le')
+              .format('wav')
+              .on('end', resolve)
+              .on('error', reject)
+              .run();
+      });
 
-    await new Promise((resolve, reject) => {
-      ffmpeg(tempAudioPath)
-        .output(convertedAudioPath)
-        .audioCodec('pcm_s16le')
-        .format('wav')
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
+      // Process the audio with Google Speech-to-Text
+      const audioBytes = fs.readFileSync(convertedAudioPath).toString('base64');
+      const [speechResponse] = await speechClient.recognize({
+          audio: { content: audioBytes },
+          config: { encoding: 'LINEAR16', sampleRateHertz: 48000, languageCode: 'sv-SE' }
+      });
+      const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
 
-    // Läs in konverterad ljudfil
-    const audioBytes = fs.readFileSync(convertedAudioPath).toString('base64');
+      console.log('Transcription:', transcription);
 
-    // Skicka till Google Speech-to-Text
-    const [speechResponse] = await speechClient.recognize({
-      audio: { content: audioBytes },
-      config: {
-        encoding: 'LINEAR16',
-        sampleRateHertz: 48000, 
-        languageCode: 'sv-SE', 
-      },
-    });
+      // If the prompt is "End conversation", end the current conversation
+      if (transcription.trim().toLowerCase() === 'end conversation') {
+          await endConversation(userId);
+          res.status(200).send({ message: 'Conversation ended successfully.' });
+          return;
+      }
 
-    const transcription = speechResponse.results
-      .map(result => result.alternatives[0].transcript)
-      .join('\n');
+      // Otherwise, process the prompt with OpenAI and save the conversation
+      const chatResponse = await openai.chat.completions.create({
+          messages: [{ role: 'system', content: transcription }],
+          model: 'gpt-4'
+      });
 
-    console.log('Transkription:', transcription);
+      const replyText = chatResponse.choices[0].message.content;
+      console.log('OpenAI Response:', replyText);
 
-    // Skicka transkriptionen till OpenAI
-    const chatResponse = await openai.chat.completions.create({
+      // Save the conversation (ongoing or new)
+      await saveConversation(userId, transcription, replyText);
 
-      messages: [{ role: 'system', content: transcription }],
-      model: 'gpt-4o',
-    });
+      // Convert the OpenAI response to audio using Google Text-to-Speech
+      const [ttsResponse] = await ttsClient.synthesizeSpeech({
+          input: { text: replyText },
+          voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
+          audioConfig: { audioEncoding: 'mp3' }
+      });
 
-    const replyText = chatResponse.choices[0].message.content;
-    console.log('GPT-4 Svar:', replyText);
-
-    // Konvertera svaret till tal med Google Text-to-Speech
-    const [ttsResponse] = await ttsClient.synthesizeSpeech({
-      input: { text: replyText },
-      voice: {
-        languageCode: 'sv-SE',
-        ssmlGender: 'NEUTRAL',
-      },
-      audioConfig: { audioEncoding: 'mp3' },
-    });
-
-    res.set('Content-Type', 'audio/mp3');
-    res.send(ttsResponse.audioContent);
+      res.set('Content-Type', 'audio/mp3');
+      res.send(ttsResponse.audioContent);
   } catch (error) {
-    console.error('Fel vid bearbetning:', error);
-    res.status(500).send('Serverfel');
+      console.error('Error processing audio:', error);
+      res.status(500).send('Server error');
   } finally {
-    if (fs.existsSync(tempAudioPath)) {
-      fs.unlinkSync(tempAudioPath);
-    }
-    if (fs.existsSync(convertedAudioPath)) {
-      fs.unlinkSync(convertedAudioPath);
-    }
+      if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
+      if (fs.existsSync(convertedAudioPath)) fs.unlinkSync(convertedAudioPath);
   }
 });
 
