@@ -8,6 +8,9 @@ import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import { Readable } from 'stream';
+import cors from 'cors';
+import admin from 'firebase-admin';
+
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -204,7 +207,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
-        sampleRateHertz: 44100, 
+        sampleRateHertz: 48000, 
         languageCode: 'sv-SE', 
       },
     });
@@ -222,7 +225,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       model: 'gpt-4o',
     });
 
-    const replyText = chatResponse.choices[0];
+    const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
 
     // Konvertera svaret till tal med Google Text-to-Speech
