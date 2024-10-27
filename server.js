@@ -8,7 +8,8 @@ import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import { Readable } from 'stream';
-import admin from 'firebase-admin'; // Changed from require to import
+import admin from 'firebase-admin';
+import { v4 as uuidv4 } from 'uuid';  // For generating unique user IDs
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -27,16 +28,18 @@ admin.initializeApp({
   databaseURL: "https://speechai-ec400-default-rtdb.europe-west1.firebasedatabase.app"
 });
 
-
 const db = admin.database();
-const ref = db.ref('Transcriptions');  // Create a reference to the "transcriptions" node
+const ref = db.ref('Transcriptions');
 
+// Generate a unique user ID for this session
+const sessionUserId = uuidv4();  // This will be used to group all session's transcriptions
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
+
   try {
-    // Spara och konvertera ljudfilen
+    // Save and convert the audio file
     fs.writeFileSync(tempAudioPath, req.file.buffer);
 
     await new Promise((resolve, reject) => {
@@ -49,61 +52,54 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
         .run();
     });
 
-    // Läs in konverterad ljudfil
     const audioBytes = fs.readFileSync(convertedAudioPath).toString('base64');
 
-    // Skicka till Google Speech-to-Text
+    // Send audio to Google Speech-to-Text
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
         sampleRateHertz: 48000, 
-        languageCode: 'sv-SE', 
+        languageCode: 'sv-SE',
       },
     });
 
     const transcription = speechResponse.results
       .map(result => result.alternatives[0].transcript)
       .join('\n');
-
+    
     console.log('Transkription:', transcription);
 
-    // Skicka transkriptionen till OpenAI
+    // Send transcription to OpenAI
     const chatResponse = await openai.chat.completions.create({
       messages: [{ role: 'system', content: transcription }],
       model: 'gpt-4o',
     });
 
-    // Extrahera GPT-4-svaret (endast textinnehållet)
     const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
 
-    //Spara transkriberingen till Databasen
-    const dbRef = admin.database().ref('Transcriptions');
-    const newTranscriptionRef = dbRef.push();  // Create a new node for each transcription
+    // Save the transcription and GPT-4 response to the database under the session-specific user ID
+    const userTranscriptionsRef = ref.child(sessionUserId); // Use the sessionUserId
+    const newTranscriptionRef = userTranscriptionsRef.push();  // Create a new node under this user ID
     await newTranscriptionRef.set({
-    transcription : transcription,
-    gpt4response : replyText,
-    timestamp : new Date().toISOString(),
-    }).then(() => {
-    console.log('Data successfully written to Firebase!');
-    }).catch((error) => {
-    console.error('Error writing data to Firebase:', error);
+      transcription: transcription,
+      gpt4response: replyText,
+      timestamp: new Date().toISOString(),
     });
 
-    // Konvertera svaret till tal med Google Text-to-Speech
+    console.log('Data successfully written to Firebase!');
+
+    // Convert reply to audio with Google Text-to-Speech
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
-      input: { text: replyText },  // Skicka endast texten här
-      voice: {
-        languageCode: 'sv-SE',
-        ssmlGender: 'NEUTRAL',
-      },
+      input: { text: replyText },
+      voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
       audioConfig: { audioEncoding: 'MP3' },
     });
 
-    // Skicka tillbaka ljudet som svar
     res.set('Content-Type', 'audio/mp3');
     res.send(ttsResponse.audioContent);
+
   } catch (error) {
     console.error('Fel vid bearbetning:', error);
     res.status(500).send('Serverfel');
