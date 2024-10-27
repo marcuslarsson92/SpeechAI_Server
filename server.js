@@ -30,9 +30,9 @@ admin.initializeApp({
 
 const db = admin.database();
 const ref = db.ref('Transcriptions');
+// Generate a unique user ID when starting a session
+const sessionUserId = uuidv4();  
 
-// Generate a unique user ID for this session
-const sessionUserId = uuidv4();  // This will be used to group all session's transcriptions
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
@@ -79,9 +79,9 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     const replyText = chatResponse.choices[0].message.content;
     console.log('GPT-4 Svar:', replyText);
 
-    // Save the transcription and GPT-4 response to the database under the session-specific user ID
+    // Save the transcription and GPT-4 response to the database under the specific user ID
     const userTranscriptionsRef = ref.child(sessionUserId); // Use the sessionUserId
-    const newTranscriptionRef = userTranscriptionsRef.push();  // Create a new node under this user ID
+    const newTranscriptionRef = userTranscriptionsRef.push();  // Create a new node under this user ID, for transcriptions
     await newTranscriptionRef.set({
       transcription: transcription,
       gpt4response: replyText,
