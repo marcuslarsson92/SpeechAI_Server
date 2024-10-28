@@ -5,14 +5,9 @@ import speech from '@google-cloud/speech';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import OpenAI from 'openai';
 import fs from 'fs';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegPath from 'ffmpeg-static';
-import { Readable } from 'stream';
 import cors from 'cors';
 import admin from 'firebase-admin';
-
-
-ffmpeg.setFfmpegPath(ffmpegPath);
+import { Storage } from '@google-cloud/storage';
 
 const app = express();
 const upload = multer();
@@ -22,20 +17,34 @@ const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
 
+const storage = new Storage({ keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS });
+const bucket = storage.bucket('speachai-b5ce2.appspot.com');
+
 const serviceAccount = JSON.parse(fs.readFileSync('/Users/simonflenman/Kurser/keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
 
 // Initialize Firebase Admin with service account credentials
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://speachai-b5ce2-default-rtdb.europe-west1.firebasedatabase.app'  // Realtime Database URL
+  databaseURL: 'https://speachai-b5ce2-default-rtdb.europe-west1.firebasedatabase.app'
 });
+
 
 // Get a reference to the Realtime Database
 const db = admin.database();
 
 function generateId() {
-  return db.ref().push().key; // Generates a unique ID by Firebase
+  return db.ref().push().key;
 }
+
+// Helper function to upload audio to Firebase Storage
+async function uploadAudio(fileBuffer, fileName) {
+  const file = bucket.file(fileName);
+  await file.save(fileBuffer, { contentType: 'audio/mpeg' });
+  await file.makePublic();
+  return `https://storage.googleapis.com/${bucket.name}/${file.name}`;
+}
+
+////////////// User Handeling ///////////////////////////
 
 // POST endpoint to store new user
 app.post('/register', async (req, res) => {
@@ -46,7 +55,25 @@ app.post('/register', async (req, res) => {
     return res.status(400).send('Email and password are required.');
   }
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!emailRegex.test(email)) {
+  return res.status(400).send('Invalid email format.');
+}
+
   try {
+    // Reference to the users node
+    const usersRef = db.ref('users');
+
+    // Check if the email or password already exists
+    const snapshot = await usersRef.orderByChild('Email').equalTo(email).once('value');
+    if (snapshot.exists()) {
+      return res.status(409).send('Email is already in use.');
+    }
+    const passwordSnapshot = await usersRef.orderByChild('Password').equalTo(password).once('value');
+    if (passwordSnapshot.exists()) {
+      return res.status(409).send('Password is already in use. Please choose a different password.');
+    }
+
     // Generate a new ID
     const userId = generateId();
 
@@ -55,19 +82,20 @@ app.post('/register', async (req, res) => {
       ID: userId,
       Email: email,
       Password: password,
-      Admin: false 
+      Admin: false
     };
 
-    // Save the user data Database
+    // Save the user data to the Database
     await db.ref(`users/${userId}`).set(newUser);
 
-    // Send success or error response
+    // Send success response
     res.status(200).send({ message: 'User registered successfully', userId });
   } catch (error) {
     console.error('Error saving user data:', error);
     res.status(500).send('Internal server error.');
   }
 });
+
 
 // DELETE endpoint to delete a user by ID
 app.delete('/delete-user/:id', async (req, res) => {
@@ -181,52 +209,111 @@ app.get('/get-all-users', async (req, res) => {
   }
 });
 
-// Function to save conversation in Firebase
-async function saveConversation(userId, prompt, answer, promptAudioURL = '', answerAudioURL = '') {
-  if (!userId) {
-      userId = 'Guest';
+// Function to toggle admin status for a specified user
+async function toggleAdminStatus(requestingUserId, targetUserId) {
+  try {
+    // Get the requesting user's admin status
+    const requestingUserRef = db.ref(`users/${requestingUserId}`);
+    const requestingUserSnapshot = await requestingUserRef.once('value');
+
+    // Check if the requesting user exists and is an admin
+    if (!requestingUserSnapshot.exists() || !requestingUserSnapshot.val().Admin) {
+      throw new Error('Permission denied: Only admins can toggle admin status.');
+    }
+
+    // Get the target user's current admin status
+    const targetUserRef = db.ref(`users/${targetUserId}`);
+    const targetUserSnapshot = await targetUserRef.once('value');
+
+    // Check if the target user exists
+    if (!targetUserSnapshot.exists()) {
+      throw new Error('Target user not found.');
+    }
+
+    // Toggle the target user's admin status
+    const currentAdminStatus = targetUserSnapshot.val().Admin;
+    await targetUserRef.update({ Admin: !currentAdminStatus });
+
+    console.log(`Admin status for user ${targetUserId} toggled to ${!currentAdminStatus}`);
+    return { message: `Admin status toggled successfully for user ${targetUserId}.`, newAdminStatus: !currentAdminStatus };
+  } catch (error) {
+    console.error('Error toggling admin status:', error);
+    throw error;
   }
+}
+
+// Endpoint to toggle admin status
+app.put('/toggle-admin-status', async (req, res) => {
+  const { requestingUserId, targetUserId } = req.body;
+
+  try {
+    // Call the toggleAdminStatus function with provided user IDs
+    const result = await toggleAdminStatus(requestingUserId, targetUserId);
+    res.status(200).send(result);
+  } catch (error) {
+    res.status(403).send({ message: error.message });
+  }
+});
+
+//////////////// Conversation handeling //////////////////////////////
+
+
+async function saveConversation(userId, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
+  if (!userId) userId = 'Guest';
 
   // Reference to the user's conversations
   const conversationsRef = db.ref(`Conversations/${userId}`);
 
-  // Check if the last conversation is ongoing (not ended)
+  // Check for an ongoing conversation
   const ongoingConversationSnapshot = await conversationsRef.orderByChild('Ended').equalTo(false).limitToLast(1).once('value');
   let conversationId;
   let conversationData;
 
-  // If an ongoing conversation exists
+  // Upload audio files and get URLs
+  const promptAudioURL = await uploadAudio(promptAudioBuffer, `${userId}/conversations/${generateId()}/prompt.mp3`);
+  const answerAudioURL = await uploadAudio(answerAudioBuffer, `${userId}/conversations/${generateId()}/answer.mp3`);
+
   if (ongoingConversationSnapshot.exists()) {
       const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
       conversationData = ongoingConversationSnapshot.val()[conversationKey];
       conversationId = conversationKey;
 
       // Add the new prompt and answer to the existing conversation
-      conversationData.PromptsAndAnswers.push({ Prompt: prompt, Answer: answer, PromptAudioURL: promptAudioURL, AnswerAudioURL: answerAudioURL });
-      
+      conversationData.PromptsAndAnswers.push({
+          Prompt: prompt,
+          Answer: answer,
+          PromptAudioURL: promptAudioURL,
+          AnswerAudioURL: answerAudioURL
+      });
+
       // Save the updated conversation
       await db.ref(`Conversations/${userId}/${conversationId}`).update(conversationData);
   } else {
       // No ongoing conversation, create a new one
       conversationId = generateId();
       conversationData = {
-          PromptsAndAnswers: [{ Prompt: prompt, Answer: answer, PromptAudioURL: promptAudioURL, AnswerAudioURL: answerAudioURL }],
+          PromptsAndAnswers: [
+              {
+                  Prompt: prompt,
+                  Answer: answer,
+                  PromptAudioURL: promptAudioURL,
+                  AnswerAudioURL: answerAudioURL
+              }
+          ],
           Date: new Date().toISOString(),
-          Ended: false  // New conversation, not ended
+          Ended: false
       };
 
       // Save the new conversation
       await db.ref(`Conversations/${userId}/${conversationId}`).set(conversationData);
   }
 
-  return conversationId; // Return conversation ID for reference if needed
+  return conversationId;
 }
 
 // Function to end the conversation
 async function endConversation(userId) {
-  if (!userId) {
-      userId = 'Guest';
-  }
+  if (!userId) userId = 'Guest';
 
   const conversationsRef = db.ref(`Conversations/${userId}`);
 
@@ -235,7 +322,6 @@ async function endConversation(userId) {
   if (ongoingConversationSnapshot.exists()) {
       const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
       await db.ref(`Conversations/${userId}/${conversationKey}`).update({ Ended: true, EndedAt: new Date().toISOString() });
-      console.log(`Conversation ${conversationKey} for user ${userId} ended.`);
   }
 }
 
@@ -268,7 +354,6 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
     res.status(500).send({ message: 'Internal server error.' });
   }
 });
-
 
 // GET endpoint to fetch all conversations for all users
 app.get('/get-all-conversations', async (req, res) => {
@@ -374,33 +459,89 @@ app.post('/get-conversations', async (req, res) => {
   }
 });
 
-// POST endpoint to handle incoming audio processing and conversation logic
+////////////////// Audio Handeling ////////////////////////
+
+// Function to retrieve audio files based on constraints
+async function getAudioFiles({ userId = null, conversationId = null }) {
+  const result = [];
+
+  try {
+    let queryRef;
+
+    // Case 1: No constraints, retrieve all audio files
+    if (!userId && !conversationId) {
+      queryRef = db.ref('Conversations');
+    }
+    // Case 2: Only userId provided, retrieve all audio files for that user
+    else if (userId && !conversationId) {
+      queryRef = db.ref(`Conversations/${userId}`);
+    }
+    // Case 3: Both userId and conversationId provided, retrieve specific conversation's audio files
+    else if (userId && conversationId) {
+      queryRef = db.ref(`Conversations/${userId}/${conversationId}`);
+    }
+
+    // Fetch data from the database
+    const snapshot = await queryRef.once('value');
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+
+      if (!userId && !conversationId) {
+        // No constraints, iterate over all users and their conversations
+        for (const [userId, userConversations] of Object.entries(data)) {
+          for (const [conversationId, conversation] of Object.entries(userConversations)) {
+            conversation.PromptsAndAnswers.forEach(pa => {
+              result.push({ promptAudioURL: pa.PromptAudioURL, answerAudioURL: pa.AnswerAudioURL });
+            });
+          }
+        }
+      } else if (userId && !conversationId) {
+        // Only userId provided, iterate over all conversations for this user
+        for (const [conversationId, conversation] of Object.entries(data)) {
+          conversation.PromptsAndAnswers.forEach(pa => {
+            result.push({ promptAudioURL: pa.PromptAudioURL, answerAudioURL: pa.AnswerAudioURL });
+          });
+        }
+      } else if (userId && conversationId) {
+        // Both userId and conversationId provided, fetch audio files for the specific conversation
+        data.PromptsAndAnswers.forEach(pa => {
+          result.push({ promptAudioURL: pa.PromptAudioURL, answerAudioURL: pa.AnswerAudioURL });
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error retrieving audio files:', error);
+    throw new Error('Failed to retrieve audio files.');
+  }
+}
+
+// GET endpoint to retrieve audio files
+app.get('/get-audio-files', async (req, res) => {
+  const { userId, conversationId } = req.query;  // Get userId and conversationId from query parameters
+
+  try {
+    const audioFiles = await getAudioFiles({ userId, conversationId });
+    res.status(200).json(audioFiles);
+  } catch (error) {
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+
+///// POST endpoint to handle incoming audio processing and conversation logic /////
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
-  let tempAudioPath = 'temp_audio.webm';
-  let convertedAudioPath = 'converted_audio.wav';
   const userId = req.body.userId;
 
   try {
-      // Save and convert the audio file
-      fs.writeFileSync(tempAudioPath, req.file.buffer);
-      await new Promise((resolve, reject) => {
-          ffmpeg(tempAudioPath)
-              .output(convertedAudioPath)
-              .audioCodec('pcm_s16le')
-              .format('wav')
-              .on('end', resolve)
-              .on('error', reject)
-              .run();
-      });
-
       // Process the audio with Google Speech-to-Text
-      const audioBytes = fs.readFileSync(convertedAudioPath).toString('base64');
+      const audioBytes = req.file.buffer.toString('base64');
       const [speechResponse] = await speechClient.recognize({
           audio: { content: audioBytes },
-          config: { encoding: 'LINEAR16', sampleRateHertz: 48000, languageCode: 'sv-SE' }
+          config: { encoding: 'MP3', sampleRateHertz: 48000, languageCode: 'sv-SE' }
       });
       const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
-
       console.log('Transcription:', transcription);
 
       // If the prompt is "End conversation", end the current conversation
@@ -410,7 +551,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
           return;
       }
 
-      // Otherwise, process the prompt with OpenAI and save the conversation
+      // Process prompt with OpenAI
       const chatResponse = await openai.chat.completions.create({
           messages: [{ role: 'system', content: transcription }],
           model: 'gpt-4'
@@ -419,24 +560,23 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       const replyText = chatResponse.choices[0].message.content;
       console.log('OpenAI Response:', replyText);
 
-      // Save the conversation (ongoing or new)
-      await saveConversation(userId, transcription, replyText);
-
-      // Convert the OpenAI response to audio using Google Text-to-Speech
+      // Convert OpenAI response to audio
       const [ttsResponse] = await ttsClient.synthesizeSpeech({
           input: { text: replyText },
           voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
-          audioConfig: { audioEncoding: 'mp3' }
+          audioConfig: { audioEncoding: 'MP3' }
       });
+      const answerAudioBuffer = ttsResponse.audioContent;
 
+      // Save conversation with both text and audio
+      await saveConversation(userId, transcription, replyText, req.file.buffer, answerAudioBuffer);
+
+      // Send audio response to client
       res.set('Content-Type', 'audio/mp3');
-      res.send(ttsResponse.audioContent);
+      res.send(answerAudioBuffer);
   } catch (error) {
       console.error('Error processing audio:', error);
       res.status(500).send('Server error');
-  } finally {
-      if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
-      if (fs.existsSync(convertedAudioPath)) fs.unlinkSync(convertedAudioPath);
   }
 });
 
