@@ -30,9 +30,32 @@ admin.initializeApp({
 
 const db = admin.database();
 const ref = db.ref('Transcriptions');
-// Generate a unique user ID when starting a session
-const sessionUserId = uuidv4();  
 
+// Function to generate a sequential Guest ID
+async function generateGuestId() {
+  const snapshot = await ref.once('value');
+  const users = snapshot.val();
+  let maxGuestNumber = 0;
+
+  // Loop through existing user IDs to find the highest Guest ID
+  for (const userId in users) {
+    if (userId.startsWith('Guest-')) {
+      const guestNumber = parseInt(userId.split('-')[1], 10);
+      if (!isNaN(guestNumber) && guestNumber > maxGuestNumber) {
+        maxGuestNumber = guestNumber;
+      }
+    }
+  }
+
+  return `Guest-${maxGuestNumber + 1}`;
+}
+
+// Generate a unique Guest ID for each new session
+let sessionUserId;
+generateGuestId().then((guestId) => {
+  sessionUserId = guestId;
+  console.log(`New session user ID: ${sessionUserId}`);
+});
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
