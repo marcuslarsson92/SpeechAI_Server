@@ -9,7 +9,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import { Readable } from 'stream';
 import admin from 'firebase-admin';
-import { v4 as uuidv4 } from 'uuid';  // For generating unique user IDs
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
