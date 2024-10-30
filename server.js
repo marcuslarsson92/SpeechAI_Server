@@ -103,11 +103,12 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 
     // Save the transcription and GPT-4 response to the database under the specific user ID
     const userTranscriptionsRef = ref.child(sessionUserId); // Use the sessionUserId
-    const newTranscriptionRef = userTranscriptionsRef.push();  // Create a new node under this user ID, for transcriptions
+    const newTranscriptionRef = userTranscriptionsRef.push();  
     await newTranscriptionRef.set({
       transcription: transcription,
       gpt4response: replyText,
-      timestamp: new Date().toISOString(),
+      //TODO: fix so that the date looks more clean and presentable.
+      timestamp: new Date().toISOString(), 
     });
 
     console.log('Data successfully written to Firebase!');
