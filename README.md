@@ -1,10 +1,10 @@
 Dependencys to install:
-npm install firebase-admin
+firebase-admin
 
 
 
 
-# Docker
+# Docker - (Prerequisites: Docker alreadu installed on your computer)
 1. Open two seperate CLI
 2. CLI #1: cd into /Speech-AI-client/
 3. run the following command to build client image: docker build -t client:latest .
