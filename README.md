@@ -13,7 +13,7 @@ firebase-admin
 6. run the following command to build server image: docker build -t server:latest .
 7. then tag the image: docker tag server:latest server:latest
 8. Both images are built. Great. Now, docker compose. Run command: docker compose -f docker-compose.yaml up --build
-9. 
+9. You should be able to see the application at: localhost:8080
 10. CLI #2 (/SpeechAI-server): To cleanup when you're done  docker compose down 
 11. To restart, just run this again (CLI#2): docker compose -f docker-compose.yaml up --build
 
