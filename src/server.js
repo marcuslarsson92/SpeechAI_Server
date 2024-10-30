@@ -18,6 +18,7 @@ const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
+const port = 3001;
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
@@ -92,6 +93,6 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log('Servern körs på port 3000');
+app.listen(port, () => {
+  console.log('Servern körs på port '+ port);
 });
