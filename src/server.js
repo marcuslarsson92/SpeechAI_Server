@@ -1,8 +1,4 @@
 import 'dotenv/config';
-import dotenv from 'dotenv';
-console.log("Loaded OpenAI API Key:", process.env.OPENAI_API_KEY);
-
-
 import express from 'express';
 import multer from 'multer';
 import speech from '@google-cloud/speech';
