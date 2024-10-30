@@ -24,18 +24,13 @@ const port = 3001;
 //TODO: Se över nedan så inte tillåter något vi inte ska tillåta
 function setCorsHeaders(req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   next();
 }
 
 app.use(setCorsHeaders);
 
-/*
-app.use(cors({
-  origin: 'http://localhost:5173', // Använd frontend-porten    - 'http://localhost:8080'
-  methods: ['GET', 'POST'], // Tillåt bara specifika metoder
-})); */
 
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
