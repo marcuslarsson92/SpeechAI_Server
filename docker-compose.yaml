@@ -7,11 +7,11 @@ services:
       - ../Speech-AI-client/src:/app/src    
     networks:
       - speech-network
+    environment:
+      IS_DOCKER: true
 
   server:
     image: server
-    ports:
-      - 3001:3001
     volumes:
       - ./src:/app/src
     env_file:
