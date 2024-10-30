@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import dotenv from 'dotenv';
+console.log("Loaded OpenAI API Key:", process.env.OPENAI_API_KEY);
+
+
 import express from 'express';
 import multer from 'multer';
 import speech from '@google-cloud/speech';
@@ -14,7 +18,9 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const upload = multer();
-const openai = new OpenAI();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
