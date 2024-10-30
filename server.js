@@ -68,6 +68,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       ffmpeg(tempAudioPath)
         .output(convertedAudioPath)
         .audioCodec('pcm_s16le')
+        .audioChannels(1)
         .format('wav')
         .on('end', resolve)
         .on('error', reject)
