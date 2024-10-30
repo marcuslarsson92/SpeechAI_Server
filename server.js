@@ -340,6 +340,7 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
 
       // Convert the conversations object to an array of conversations
       const conversationsList = Object.entries(conversationsData).map(([conversationId, conversation]) => ({
+        ConversationId: conversationId,
         PromptsAndAnswers: conversation.PromptsAndAnswers, // Return all prompt-answer pairs
         Date: conversation.Date  // Return the conversation's date
       }));
@@ -399,7 +400,6 @@ app.get('/get-all-conversations', async (req, res) => {
     res.status(500).send({ message: 'Internal server error.' });
   }
 });
-
 
 // POST endpoint to fetch conversations by userId (optional) and a date interval
 app.post('/get-conversations', async (req, res) => {
