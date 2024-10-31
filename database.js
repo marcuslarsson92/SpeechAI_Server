@@ -229,7 +229,7 @@ class Database {
             AnswerAudioURL: answerAudioURL,
           },
         ],
-        Date: new Date().toISOString(),
+        Date: this.formatDate(new Date()),
         Ended: false,
       };
 
@@ -255,7 +255,7 @@ class Database {
       const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
       await this.db
         .ref(`Conversations/${userId}/${conversationKey}`)
-        .update({ Ended: true, EndedAt: new Date().toISOString() });
+        .update({ Ended: true, EndedAt: this.formatDate(new Date()) });
     }
   }
 
@@ -406,6 +406,14 @@ class Database {
     }
 
     return result;
+  }
+  formatDate(date) {
+    const year = date.getUTCFullYear();
+    const month = ('0' + (date.getUTCMonth() + 1)).slice(-2); // Months are zero-based
+    const day = ('0' + date.getUTCDate()).slice(-2);
+    const hours = ('0' + date.getUTCHours()).slice(-2);
+    const minutes = ('0' + date.getUTCMinutes()).slice(-2);
+    return `${year}-${month}-${day}, ${hours}:${minutes}`;
   }
 }
 
