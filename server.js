@@ -21,6 +21,58 @@ const speechClient = new speech.SpeechClient({
 
 const database = new Database();
 
+// --------------------- Audio Processing Endpoint --------------------- //
+
+// POST endpoint to handle incoming audio processing and conversation logic
+app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+  const userId = req.body.userId;
+
+  try {
+    // Process the audio with Google Speech-to-Text
+    const audioBytes = req.file.buffer.toString('base64');
+    const [speechResponse] = await speechClient.recognize({
+      audio: { content: audioBytes },
+      config: { encoding: 'MP3', sampleRateHertz: 48000, languageCode: 'sv-SE' },
+    });
+    const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
+    console.log('Transcription:', transcription);
+
+    // If the prompt is "End conversation", end the current conversation
+    if (transcription.trim().toLowerCase() === 'end conversation') {
+      await database.endConversation(userId);
+      res.status(200).send({ message: 'Conversation ended successfully.' });
+      return;
+    }
+
+    // Process prompt with OpenAI
+    const chatResponse = await openai.chat.completions.create({
+      messages: [{ role: 'user', content: transcription }],
+      model: 'gpt-4',
+    });
+
+    const replyText = chatResponse.choices[0].message.content;
+    console.log('OpenAI Response:', replyText);
+
+    // Convert OpenAI response to audio
+    const [ttsResponse] = await ttsClient.synthesizeSpeech({
+      input: { text: replyText },
+      voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
+      audioConfig: { audioEncoding: 'MP3' },
+    });
+    const answerAudioBuffer = ttsResponse.audioContent;
+
+    // Save conversation with both text and audio
+    await database.saveConversation(userId, transcription, replyText, req.file.buffer, answerAudioBuffer);
+
+    // Send audio response to client
+    res.set('Content-Type', 'audio/mp3');
+    res.send(answerAudioBuffer);
+  } catch (error) {
+    console.error('Error processing audio:', error);
+    res.status(500).send('Server error');
+  }
+});
+
 // --------------------- User Handling Endpoints --------------------- //
 
 // POST endpoint to register a new user
@@ -215,58 +267,6 @@ app.get('/get-audio-files', async (req, res) => {
   } catch (error) {
     console.error('Error retrieving audio files:', error);
     res.status(500).send({ message: 'Internal server error.' });
-  }
-});
-
-// --------------------- Audio Processing Endpoint --------------------- //
-
-// POST endpoint to handle incoming audio processing and conversation logic
-app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
-  const userId = req.body.userId;
-
-  try {
-    // Process the audio with Google Speech-to-Text
-    const audioBytes = req.file.buffer.toString('base64');
-    const [speechResponse] = await speechClient.recognize({
-      audio: { content: audioBytes },
-      config: { encoding: 'MP3', sampleRateHertz: 48000, languageCode: 'sv-SE' },
-    });
-    const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
-    console.log('Transcription:', transcription);
-
-    // If the prompt is "End conversation", end the current conversation
-    if (transcription.trim().toLowerCase() === 'end conversation') {
-      await database.endConversation(userId);
-      res.status(200).send({ message: 'Conversation ended successfully.' });
-      return;
-    }
-
-    // Process prompt with OpenAI
-    const chatResponse = await openai.chat.completions.create({
-      messages: [{ role: 'user', content: transcription }],
-      model: 'gpt-4',
-    });
-
-    const replyText = chatResponse.choices[0].message.content;
-    console.log('OpenAI Response:', replyText);
-
-    // Convert OpenAI response to audio
-    const [ttsResponse] = await ttsClient.synthesizeSpeech({
-      input: { text: replyText },
-      voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
-      audioConfig: { audioEncoding: 'MP3' },
-    });
-    const answerAudioBuffer = ttsResponse.audioContent;
-
-    // Save conversation with both text and audio
-    await database.saveConversation(userId, transcription, replyText, req.file.buffer, answerAudioBuffer);
-
-    // Send audio response to client
-    res.set('Content-Type', 'audio/mp3');
-    res.send(answerAudioBuffer);
-  } catch (error) {
-    console.error('Error processing audio:', error);
-    res.status(500).send('Server error');
   }
 });
 
