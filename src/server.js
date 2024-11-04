@@ -35,7 +35,10 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
         .audioChannels(1)
         .format('wav')
         .on('end', resolve)
-        .on('error', reject)
+        .on('error', (err) => {
+          console.error('Fel vid konvertering:', err);
+          reject(err);
+        })
         .run();
     });
 
@@ -47,8 +50,8 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
-        sampleRateHertz: 48000, 
-        languageCode: 'sv-SE', 
+        sampleRateHertz: 48000, // Kontrollera att detta är korrekt för din ljudfil
+        languageCode: 'sv-SE',
       },
     });
 
@@ -60,7 +63,6 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 
     // Skicka transkriptionen till OpenAI
     const chatResponse = await openai.chat.completions.create({
-
       messages: [{ role: 'system', content: transcription }],
       model: 'gpt-4o',
     });
@@ -78,12 +80,17 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audioConfig: { audioEncoding: 'MP3' },
     });
 
-    res.set('Content-Type', 'audio/mp3');
-    res.send(ttsResponse.audioContent);
+    // Returnera transkription och ljudsvar som JSON
+    res.json({
+      transcription,
+      responseTranscription: replyText,
+      audio: ttsResponse.audioContent.toString('base64'), // Skicka ljudet som base64
+    });
   } catch (error) {
-    console.error('Fel vid bearbetning:', error);
-    res.status(500).send('Serverfel');
+    console.error('Fel vid bearbetning:', error.message);
+    res.status(500).send('Serverfel: ' + error.message); // Ge mer info tillbaka
   } finally {
+    // Rensa upp temporära filer
     if (fs.existsSync(tempAudioPath)) {
       fs.unlinkSync(tempAudioPath);
     }
@@ -94,5 +101,5 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log('Servern körs på port '+ port);
+  console.log('Servern körs på port ' + port);
 });
