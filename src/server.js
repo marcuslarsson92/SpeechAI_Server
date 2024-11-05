@@ -13,15 +13,14 @@ import cors from 'cors';
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
-const upload = multer();
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const multerC = multer();
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
 const ttsClient = new TextToSpeechClient();
-const speechClient = new speech.SpeechClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-});
+const speechClient = new speech.SpeechClient({keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS});
 const port = 3001;
+
+app.use(setCorsHeaders);
+app.use(express.json());
 
 //TODO: Se över nedan så inte tillåter något vi inte ska tillåta
 function setCorsHeaders(req, res, next) {
@@ -31,10 +30,26 @@ function setCorsHeaders(req, res, next) {
   next();
 }
 
-app.use(setCorsHeaders);
+app.post('/api/prompt', async (req, res) => {
+  try {
+        const prompt = req.body.prompt;
+        const chatResponse = await openai.chat.completions.create({
+          messages: [{ role: 'system', content: prompt}],
+          model: 'chatgpt-4o-latest',
+          max_tokens: 100,
+        });
+        const replyText = chatResponse.choices[0].message.content;
+        console.log(replyText);
+        res.json({ response: replyText });
+      } catch (error) {
+        console.error('Error handling request; ', error);
+        res.status(500).json({ error: 'An error occurred. Please try again. '});
+      }
+      
+  });
 
 
-app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
 
