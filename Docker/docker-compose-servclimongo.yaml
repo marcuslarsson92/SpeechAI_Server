@@ -1,0 +1,34 @@
+services:
+  server:
+    image: server
+    ports:
+      - 8080:3000
+    volumes:
+      - ./src:/app/src
+    environment:
+      DATABASE_HOST: database
+    depends_on:
+      - database
+
+  client:
+    image: client
+    volumes:
+      - ./src:/app/src    
+    environment:
+      DATABASE_HOST: database
+    depends_on:
+      - database
+      
+  database:
+    image: mongo
+    restart: always
+    command: --quiet --syslog
+    expose:
+      - "27017"
+    volumes:
+      - database-data:/data/db
+      - mongo-config:/data/configdb
+
+volumes:
+  database-data:
+  mongo-config:
