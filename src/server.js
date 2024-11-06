@@ -8,18 +8,42 @@ import fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import { Readable } from 'stream';
+<<<<<<< Updated upstream
+=======
+import cors from 'cors';
+>>>>>>> Stashed changes
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const upload = multer();
+<<<<<<< Updated upstream
 const openai = new OpenAI();
+=======
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+>>>>>>> Stashed changes
 const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({
   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
 const port = 3000;
 
+<<<<<<< Updated upstream
+=======
+//TODO: Se över nedan så inte tillåter något vi inte ska tillåta
+function setCorsHeaders(req, res, next) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+}
+
+app.use(setCorsHeaders);
+
+
+>>>>>>> Stashed changes
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   let tempAudioPath = 'temp_audio.webm';
   let convertedAudioPath = 'converted_audio.wav';
@@ -35,10 +59,14 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
         .audioChannels(1)
         .format('wav')
         .on('end', resolve)
+<<<<<<< Updated upstream
         .on('error', (err) => {
           console.error('Fel vid konvertering:', err);
           reject(err);
         })
+=======
+        .on('error', reject)
+>>>>>>> Stashed changes
         .run();
     });
 
@@ -50,8 +78,13 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: {
         encoding: 'LINEAR16',
+<<<<<<< Updated upstream
         sampleRateHertz: 48000, // Kontrollera att detta är korrekt för din ljudfil
         languageCode: 'sv-SE',
+=======
+        sampleRateHertz: 48000, 
+        languageCode: 'sv-SE', 
+>>>>>>> Stashed changes
       },
     });
 
@@ -63,6 +96,10 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 
     // Skicka transkriptionen till OpenAI
     const chatResponse = await openai.chat.completions.create({
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
       messages: [{ role: 'system', content: transcription }],
       model: 'gpt-4o',
     });
@@ -80,6 +117,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audioConfig: { audioEncoding: 'MP3' },
     });
 
+<<<<<<< Updated upstream
     // Returnera transkription och ljudsvar som JSON
     res.json({
       transcription,
@@ -91,6 +129,14 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     res.status(500).send('Serverfel: ' + error.message); // Ge mer info tillbaka
   } finally {
     // Rensa upp temporära filer
+=======
+    res.set('Content-Type', 'audio/mp3');
+    res.send(ttsResponse.audioContent);
+  } catch (error) {
+    console.error('Fel vid bearbetning:', error);
+    res.status(500).send('Serverfel');
+  } finally {
+>>>>>>> Stashed changes
     if (fs.existsSync(tempAudioPath)) {
       fs.unlinkSync(tempAudioPath);
     }
@@ -101,5 +147,9 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
 });
 
 app.listen(port, () => {
+<<<<<<< Updated upstream
   console.log('Servern körs på port ' + port);
+=======
+  console.log('Servern körs på port '+ port);
+>>>>>>> Stashed changes
 });
