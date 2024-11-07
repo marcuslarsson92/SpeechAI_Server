@@ -6,6 +6,7 @@ import { Storage } from '@google-cloud/storage';
 
 // Initialize Firebase Admin with service account credentials
 const serviceAccount = JSON.parse(fs.readFileSync('/Users/nicke/Keys/apikeydatabasesimon.json', 'utf8'));
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: 'https://speachai-b5ce2-default-rtdb.europe-west1.firebasedatabase.app'
@@ -22,23 +23,30 @@ class Database {
     this.bucket = bucket;
   }
 
-  // Generate a unique ID for regular users
-  generateId() {
-    return this.db.ref().push().key;
+  // Generate a guest ID in the format "Guest-1", "Guest-2", etc.
+  async generateGuestId() {
+    const usersRef = this.db.ref('users');
+    const snapshot = await usersRef.once('value');
+
+    let guestCount = 0;
+    if (snapshot.exists()) {
+      const users = snapshot.val();
+      Object.values(users).forEach(user => {
+        if (user.ID && user.ID.startsWith('Guest-')) {
+          const num = parseInt(user.ID.split('-')[1], 10);
+          if (!isNaN(num) && num > guestCount) {
+            guestCount = num;
+          }
+        }
+      });
+    }
+
+    return `Guest-${guestCount + 1}`;
   }
 
-  // Generate a Guest ID like Guest-1, Guest-2, etc.
-  async generateGuestId() {
-    const guestCountRef = this.db.ref('guestCount'); // We store the guest count in the 'guestCount' location
-    const snapshot = await guestCountRef.once('value');
-    let guestCount = snapshot.exists() ? snapshot.val() : 0;
-
-    // Increment the guest count and save it back
-    guestCount += 1;
-    await guestCountRef.set(guestCount);
-
-    // Return the new guest ID in the format Guest-<number>
-    return `Guest-${guestCount}`;
+  // Generate a unique ID
+  generateId() {
+    return this.db.ref().push().key;
   }
 
   // Upload audio to Firebase Storage
@@ -76,7 +84,7 @@ class Database {
     }
 
     // Generate a new user ID
-    const userId = this.generateId();
+    const userId = await this.generateGuestId();
 
     const newUser = {
       ID: userId,
@@ -195,10 +203,7 @@ class Database {
 
   // Save a conversation
   async saveConversation(userId, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
-    // If no userId is passed, assign a new guest ID
-    if (!userId) {
-      userId = await this.generateGuestId();
-    }
+    if (!userId) userId = await this.generateGuestId();
 
     const conversationsRef = this.db.ref(`Conversations/${userId}`);
 
@@ -258,7 +263,7 @@ class Database {
 
   // End a conversation
   async endConversation(userId) {
-    if (!userId) userId = 'Guest';
+    if (!userId) userId = await this.generateGuestId();
 
     const conversationsRef = this.db.ref(`Conversations/${userId}`);
 
@@ -272,13 +277,13 @@ class Database {
     if (ongoingConversationSnapshot.exists()) {
       const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
       await this.db.ref(`Conversations/${userId}/${conversationKey}`).update({ Ended: true });
-      return { message: 'Conversation ended successfully.' };
+      return { message: `Conversation with ID ${conversationKey} ended successfully.` };
     } else {
-      throw new Error('No ongoing conversation found.');
+      throw new Error('No ongoing conversation found for the user.');
     }
   }
 
-  // Format date
+  // Format date as a string
   formatDate(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
