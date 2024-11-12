@@ -22,10 +22,29 @@ class Database {
     this.db = db;
     this.bucket = bucket;
   }
-
-  // Generate a unique ID
   generateId() {
     return this.db.ref().push().key;
+  }
+  
+  async generateGuestId() {
+    const usersRef = this.db.ref('Conversations');
+    const snapshot = await usersRef.once('value');
+    
+    // Find the highest existing Guest ID
+    let highestGuestId = 0;
+    snapshot.forEach((childSnapshot) => {
+      const userId = childSnapshot.key;
+      const match = userId.match(/^Guest-(\d+)$/);
+      if (match) {
+        const idNum = parseInt(match[1], 10);
+        if (idNum > highestGuestId) {
+          highestGuestId = idNum;
+        }
+      }
+    });
+  
+    // Increment and return the new Guest ID
+    return `Guest-${highestGuestId + 1}`;
   }
 
   // Upload audio to Firebase Storage
@@ -181,62 +200,64 @@ class Database {
 
   // Save a conversation
   async saveConversation(userId, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
-    if (!userId) userId = 'Guest';
-
+    if (!userId || userId === 'Guest') {
+      userId = await this.generateGuestId(); // Generate a new Guest ID if not provided
+    }
+  
     const conversationsRef = this.db.ref(`Conversations/${userId}`);
 
     // Check for an ongoing conversation
-    const ongoingConversationSnapshot = await conversationsRef
-      .orderByChild('Ended')
-      .equalTo(false)
-      .limitToLast(1)
-      .once('value');
-    let conversationId;
-    let conversationData;
+  const ongoingConversationSnapshot = await conversationsRef
+  .orderByChild('Ended')
+  .equalTo(false)
+  .limitToLast(1)
+  .once('value');
+  let conversationId;
+  let conversationData;
 
-    // Upload audio files and get URLs
-    const promptAudioURL = await this.uploadAudio(
-      promptAudioBuffer,
-      `${userId}/conversations/${this.generateId()}/prompt.mp3`
-    );
-    const answerAudioURL = await this.uploadAudio(
-      answerAudioBuffer,
-      `${userId}/conversations/${this.generateId()}/answer.mp3`
-    );
+   // Upload audio files and get URLs
+  const promptAudioURL = await this.uploadAudio(
+    promptAudioBuffer,
+    `${userId}/conversations/${this.generateId()}/prompt.mp3`
+  );
+  const answerAudioURL = await this.uploadAudio(
+    answerAudioBuffer,
+    `${userId}/conversations/${this.generateId()}/answer.mp3`
+  );
 
-    if (ongoingConversationSnapshot.exists()) {
-      const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
-      conversationData = ongoingConversationSnapshot.val()[conversationKey];
-      conversationId = conversationKey;
+  if (ongoingConversationSnapshot.exists()) {
+    const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
+    conversationData = ongoingConversationSnapshot.val()[conversationKey];
+    conversationId = conversationKey;
 
-      conversationData.PromptsAndAnswers.push({
-        Prompt: prompt,
-        Answer: answer,
-        PromptAudioURL: promptAudioURL,
-        AnswerAudioURL: answerAudioURL,
-      });
+    conversationData.PromptsAndAnswers.push({
+      Prompt: prompt,
+      Answer: answer,
+      PromptAudioURL: promptAudioURL,
+      AnswerAudioURL: answerAudioURL,
+    });
 
-      await this.db.ref(`Conversations/${userId}/${conversationId}`).update(conversationData);
-    } else {
-      // No ongoing conversation, create a new one
-      conversationId = this.generateId();
-      conversationData = {
-        PromptsAndAnswers: [
-          {
-            Prompt: prompt,
-            Answer: answer,
-            PromptAudioURL: promptAudioURL,
-            AnswerAudioURL: answerAudioURL,
-          },
-        ],
-        Date: this.formatDate(new Date()),
-        Ended: false,
-      };
+    await this.db.ref(`Conversations/${userId}/${conversationId}`).update(conversationData);
+  } else {
+    // No ongoing conversation, create a new one
+    conversationId = this.generateId();
+    conversationData = {
+      PromptsAndAnswers: [
+        {
+          Prompt: prompt,
+          Answer: answer,
+          PromptAudioURL: promptAudioURL,
+          AnswerAudioURL: answerAudioURL,
+        },
+      ],
+      Date: this.formatDate(new Date()),
+      Ended: false,
+    };
 
-      await this.db.ref(`Conversations/${userId}/${conversationId}`).set(conversationData);
-    }
+    await this.db.ref(`Conversations/${userId}/${conversationId}`).set(conversationData);
+  }
 
-    return conversationId;
+  return conversationId;
   }
 
   // End a conversation
