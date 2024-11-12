@@ -21,12 +21,16 @@ class Database {
   constructor() {
     this.db = db;
     this.bucket = bucket;
+    this.currentGuestId = null;
   }
   generateId() {
     return this.db.ref().push().key;
   }
   
   async generateGuestId() {
+    if (this.currentGuestId) {
+      return this.currentGuestId;
+    }
     const usersRef = this.db.ref('Conversations');
     const snapshot = await usersRef.once('value');
     
@@ -44,7 +48,8 @@ class Database {
     });
   
     // Increment and return the new Guest ID
-    return `Guest-${highestGuestId + 1}`;
+    this.currentGuestId = `Guest-${highestGuestId + 1}`;
+    return this.currentGuestId;
   }
 
   // Upload audio to Firebase Storage
