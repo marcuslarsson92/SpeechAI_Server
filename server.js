@@ -170,7 +170,7 @@ app.get('/get-user/:id', async (req, res) => {
   }
 });
 
-// GET endpoint to fetch all users in the database
+// GET endpoint to fetch all users in the database *** Uppdatera
 app.get('/get-all-users', async (req, res) => {
   try {
     const usersList = await database.getAllUsers();
@@ -206,7 +206,7 @@ app.put('/toggle-admin-status', async (req, res) => {
 
 // --------------------- Conversation Handling Endpoints --------------------- //
 
-// GET endpoint to fetch all conversations for a specific user
+// GET endpoint to fetch all conversations for a specific user *** Update for guest
 app.get('/get-user-conversations/:userId', async (req, res) => {
   const userId = req.params.userId;
 
@@ -223,7 +223,7 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
   }
 });
 
-// GET endpoint to fetch all conversations for all users
+// GET endpoint to fetch all conversations for all users *** Update for guest
 app.get('/get-all-conversations', async (req, res) => {
   try {
     const allConversationsList = await database.getAllConversations();

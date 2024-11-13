@@ -1,11 +1,10 @@
 // database.js
-
 import fs from 'fs';
 import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 
 // Initialize Firebase Admin with service account credentials
-const serviceAccount = JSON.parse(fs.readFileSync('/Users/nicke/Keys/apikeydatabasesimon.json', 'utf8'));
+const serviceAccount = JSON.parse(fs.readFileSync('/Users/simonflenman/Kurser/keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
