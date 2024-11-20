@@ -132,6 +132,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audioConfig: { audioEncoding: 'MP3' },
     });
     const answerAudioBuffer = ttsResponse.audioContent;
+    console.log(answerAudioBuffer.toString());
 
     // Save conversation with both text and audio
     if (isMultiUser) {
@@ -163,6 +164,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     res.set('Content-Type', 'audio/mp3');
     res.send(answerAudioBuffer);
   } catch (error) {
+    console.log("inne i catch längst ner i audio");
     console.error('Error processing audio:', error);
     res.status(500).send('Server error');
   }
