@@ -30,7 +30,7 @@ app.post('/api/prompt', async (req, res) => {
   try {
         const prompt = req.body.prompt;
 
-        //Byt ut nedan mot: const response = await openAIUtil.sendPrompt(prompt);
+        //Byt ut nedan mot: const response = await openAIUtil.sendPrompt(instructions, prompt);
 
         const chatResponse = await openai.chat.completions.create({
           messages: [{ role: 'system', content: prompt}],

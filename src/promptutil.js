@@ -5,14 +5,20 @@ const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: proc
 const model = 'chatgpt-4o-latest';
 const maxTokens = 100;
 
+const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
 
-async function giveInstructions(req, res, roleInstruction = 'system') {
-    //Role + prompt
-    //Gör roleInstruction dynamisk - skicka med från frontend
+
+    //KOPPLA TRANSKRIBERINGARNA TILL OLIKA ANVÄNDARE PÅ NÅT SÄTT
+    //Ändra från 'system' till 'user' efter role, även i server.js
+    //instructions + prompt
+    //Gör instructions dynamisk - skicka med från frontend
+async function giveInstructions(req, res, instructions) {
+
     try {
         const prompt = req.body.prompt;
         const chatResponse = await openai.chat.completions.create({
-          messages: [{ role: roleInstruction, content: prompt}],
+          messages: [{role: 'system', content: instructions},  //Instruktioner till hur OpenAI ska bete sig
+            { role: 'user', content: prompt}],    //Prompten från användaren/-na
           model: model,
           max_tokens: maxTokens,
         });
@@ -23,25 +29,23 @@ async function giveInstructions(req, res, roleInstruction = 'system') {
         console.error('Error handling request; ', error);
         res.status(500).json({ error: 'An error occurred. Please try again. '});  //Ta bort här?
       }
-
-
 }
 
 
-function wordCount(transcript) {
-    let words = transcript.split(' ');
+function wordCount(transcription) {
+    let words = transcription.split(' ');
     return words.length;
 }
 
 
 
-function vocabularyRichness() {
-
+function vocabularyRichness(transcription) {
+    return `Analysera följande text och identifiera bredden och variationen i ordförrådet: ${transcription}`;
 }
 
 
 
 
-function grammaticalErrors() {
-
+function grammaticalErrors(transcription) {
+    return `Analysera följande text och identifiera grammatiska fel och förbättringar: ${transcription}`;
 }
