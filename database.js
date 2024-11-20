@@ -283,6 +283,19 @@ class Database {
         .update({ Ended: true, EndedAt: this.formatDate(new Date()) });
     }
   }
+  async endMultiUserConversation(conversationId) {
+    const conversationRef = this.db.ref(`MultiUserConversations/${conversationId}`);
+    const snapshot = await conversationRef.once('value');
+  
+    if (snapshot.exists()) {
+      await conversationRef.update({
+        Ended: true,
+        EndedAt: this.formatDate(new Date()),
+      });
+    } else {
+      throw new Error(`Conversation ${conversationId} not found.`);
+    }
+  }
 
   // Get conversations for a specific user
   async getUserConversations(userId) {
@@ -304,6 +317,62 @@ class Database {
       throw new Error('No conversations found for this user.');
     }
   }
+  async getMultiUserConversationsForUser(userId) {
+    const conversationsRef = this.db.ref('MultiUserConversations');
+    const snapshot = await conversationsRef.orderByChild(`Users/${userId}`).equalTo(true).once('value');
+  
+    if (snapshot.exists()) {
+      const conversationsData = snapshot.val();
+      return Object.entries(conversationsData).map(([conversationId, conversation]) => ({
+        ConversationId: conversationId,
+        PromptsAndAnswers: conversation.PromptsAndAnswers,
+        Date: conversation.Date,
+        Ended: conversation.Ended || false,
+        EndedAt: conversation.EndedAt || null,
+        Users: Object.keys(conversation.Users),
+      }));
+    } else {
+      return []; // No conversations found for this user
+    }
+  }
+  async getAllMultiUserConversations() {
+    const conversationsRef = this.db.ref('MultiUserConversations');
+    const snapshot = await conversationsRef.once('value');
+  
+    if (snapshot.exists()) {
+      const allConversationsData = snapshot.val();
+      const allConversationsList = [];
+  
+      Object.entries(allConversationsData).forEach(([conversationId, conversationData]) => {
+        allConversationsList.push({
+          ConversationId: conversationId,
+          PromptsAndAnswers: conversationData.PromptsAndAnswers,
+          Date: conversationData.Date,
+          Ended: conversationData.Ended || false,
+          EndedAt: conversationData.EndedAt || null,
+          Users: Object.keys(conversationData.Users),
+        });
+      });
+  
+      return allConversationsList;
+    } else {
+      throw new Error('No multi-user conversations found in the database.');
+    }
+  }    
+  //  Get all conversations for a specific user
+  async getAllConversationsForUser(userId) {
+    // Get single-user conversations
+    const singleUserConversations = await this.getUserConversations(userId);
+  
+    // Get multi-user conversations
+    const multiUserConversations = await this.getMultiUserConversationsForUser(userId);
+  
+    // Combine the results
+    return {
+      singleUserConversations,
+      multiUserConversations,
+    };
+  }  
 
   // Get all conversations for all users
   async getAllConversations() {
@@ -386,6 +455,67 @@ class Database {
       throw new Error('No conversations found.');
     }
   }
+  async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer, conversationId = null) {
+    if (!userIds || userIds.length === 0) throw new Error('At least one user ID must be provided.');
+  
+    // Generate a conversation ID if not provided
+    if (!conversationId) {
+      conversationId = this.generateId();
+    }
+  
+    // Upload audio files and get URLs
+    const promptAudioURL = await this.uploadAudio(
+      promptAudioBuffer,
+      `multi_conversations/${conversationId}/${this.generateId()}_prompt.mp3`
+    );
+    const answerAudioURL = await this.uploadAudio(
+      answerAudioBuffer,
+      `multi_conversations/${conversationId}/${this.generateId()}_answer.mp3`
+    );
+  
+    // Reference to the conversation
+    const conversationRef = this.db.ref(`MultiUserConversations/${conversationId}`);
+    const snapshot = await conversationRef.once('value');
+  
+    if (snapshot.exists()) {
+      // Conversation exists, append the new prompt and answer
+      const conversationData = snapshot.val();
+      conversationData.PromptsAndAnswers.push({
+        Prompt: prompt,
+        Answer: answer,
+        PromptAudioURL: promptAudioURL,
+        AnswerAudioURL: answerAudioURL,
+      });
+      conversationData.Date = this.formatDate(new Date()); // Update date
+      await conversationRef.update(conversationData);
+    } else {
+      // New conversation
+      const conversationData = {
+        Users: {},
+        PromptsAndAnswers: [
+          {
+            Prompt: prompt,
+            Answer: answer,
+            PromptAudioURL: promptAudioURL,
+            AnswerAudioURL: answerAudioURL,
+          },
+        ],
+        Date: this.formatDate(new Date()),
+        Ended: false,
+        EndedAt: null,
+      };
+  
+      // Add users
+      userIds.forEach((userId) => {
+        conversationData.Users[userId] = true;
+      });
+  
+      await conversationRef.set(conversationData);
+    }
+  
+    return conversationId;
+  }
+  
 
   // --------------------- Audio-Related Methods --------------------- //
 

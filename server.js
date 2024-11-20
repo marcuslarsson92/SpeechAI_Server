@@ -25,7 +25,9 @@ const database = new Database();
 
 // POST endpoint to handle incoming audio processing and conversation logic
 app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
-  const userId = req.body.userId;
+  const userIds = req.body.userIds; // Expecting an array of user IDs
+  const conversationId = req.body.conversationId || null; // Optional
+  const isMultiUser = req.body.isMultiUser === 'true'; // Flag indicating if it's a multi-user conversation
 
   try {
     // Process the audio with Google Speech-to-Text
@@ -34,14 +36,32 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
       audio: { content: audioBytes },
       config: { encoding: 'MP3', sampleRateHertz: 48000, languageCode: 'sv-SE' },
     });
-    const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
+    const transcription = speechResponse.results.map((result) => result.alternatives[0].transcript).join('\n');
     console.log('Transcription:', transcription);
 
-    // If the prompt is "End conversation", end the current conversation
+    // If the prompt is "End conversation", end the conversation
     if (transcription.trim().toLowerCase() === 'end conversation') {
-      await database.endConversation(userId);
-      res.status(200).send({ message: 'Conversation ended successfully.' });
-      return;
+      // Generate audio response saying "Conversation ended"
+      const responseText = 'Conversation ended';
+      const [ttsResponse] = await ttsClient.synthesizeSpeech({
+        input: { text: responseText },
+        voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
+        audioConfig: { audioEncoding: 'MP3' },
+      });
+      const responseAudioBuffer = ttsResponse.audioContent;
+
+      // End the conversation without saving the prompt and response
+      if (isMultiUser) {
+        await database.endMultiUserConversation(conversationId);
+      } else {
+        await database.endConversation(userIds[0], conversationId);
+      }
+
+      // Send audio response to client
+      res.set('Content-Type', 'audio/mp3');
+      res.send(responseAudioBuffer);
+
+      return; // Exit the function to prevent further processing
     }
 
     // Process prompt with OpenAI
@@ -62,7 +82,27 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
     const answerAudioBuffer = ttsResponse.audioContent;
 
     // Save conversation with both text and audio
-    await database.saveConversation(userId, transcription, replyText, req.file.buffer, answerAudioBuffer);
+    if (isMultiUser) {
+      const newConversationId = await database.saveMultiUserConversation(
+        userIds,
+        transcription,
+        replyText,
+        req.file.buffer,
+        answerAudioBuffer,
+        conversationId
+      );
+      // Optionally send back the conversationId to the client
+    } else {
+      const newConversationId = await database.saveConversation(
+        userIds[0],
+        transcription,
+        replyText,
+        req.file.buffer,
+        answerAudioBuffer,
+        conversationId
+      );
+      // Optionally send back the conversationId to the client
+    }
 
     // Send audio response to client
     res.set('Content-Type', 'audio/mp3');
@@ -211,17 +251,14 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
   const userId = req.params.userId;
 
   try {
-    const conversationsList = await database.getUserConversations(userId);
-    res.status(200).send(conversationsList);
+    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
+    res.status(200).send({ singleUserConversations, multiUserConversations });
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    if (error.message.includes('No conversations found')) {
-      res.status(404).send({ message: error.message });
-    } else {
-      res.status(500).send({ message: 'Internal server error.' });
-    }
+    res.status(500).send({ message: 'Internal server error.' });
   }
 });
+
 
 // GET endpoint to fetch all conversations for all users *** Update for guest
 app.get('/get-all-conversations', async (req, res) => {
