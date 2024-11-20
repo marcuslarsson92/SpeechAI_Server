@@ -91,6 +91,7 @@ app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
         answerAudioBuffer,
         conversationId
       );
+
       // Optionally send back the conversationId to the client
     } else {
       const newConversationId = await database.saveConversation(
@@ -210,7 +211,7 @@ app.get('/get-user/:id', async (req, res) => {
   }
 });
 
-// GET endpoint to fetch all users in the database *** Uppdatera
+// GET endpoint to fetch all users in the database
 app.get('/get-all-users', async (req, res) => {
   try {
     const usersList = await database.getAllUsers();

@@ -359,6 +359,7 @@ class Database {
       throw new Error('No multi-user conversations found in the database.');
     }
   }    
+
   //  Get all conversations for a specific user
   async getAllConversationsForUser(userId) {
     // Get single-user conversations
@@ -374,39 +375,65 @@ class Database {
     };
   }  
 
-  // Get all conversations for all users
-  async getAllConversations() {
-    const conversationsRef = this.db.ref('Conversations');
-    const snapshot = await conversationsRef.once('value');
+  // Get all conversations for all users, including multi-user conversations
+async getAllConversations() {
+  const conversationsRef = this.db.ref('Conversations');
+  const multiUserConversationsRef = this.db.ref('MultiUserConversations');
 
-    if (snapshot.exists()) {
-      const allConversationsData = snapshot.val();
-      let allConversationsList = [];
+  const [conversationsSnapshot, multiUserConversationsSnapshot] = await Promise.all([
+    conversationsRef.once('value'),
+    multiUserConversationsRef.once('value'),
+  ]);
 
-      Object.entries(allConversationsData).forEach(([userId, userConversations]) => {
-        let userConvoList = {
-          UserId: userId,
-          Conversations: [],
-        };
+  let allConversationsList = [];
 
-        Object.entries(userConversations).forEach(([conversationId, conversation]) => {
-          userConvoList.Conversations.push({
-            ConversationId: conversationId,
-            PromptsAndAnswers: conversation.PromptsAndAnswers,
-            Date: conversation.Date,
-            Ended: conversation.Ended || false,
-            EndedAt: conversation.EndedAt || null,
-          });
+  // Process single-user conversations
+  if (conversationsSnapshot.exists()) {
+    const allConversationsData = conversationsSnapshot.val();
+
+    Object.entries(allConversationsData).forEach(([userId, userConversations]) => {
+      let userConvoList = {
+        UserId: userId,
+        Conversations: [],
+      };
+
+      Object.entries(userConversations).forEach(([conversationId, conversation]) => {
+        userConvoList.Conversations.push({
+          ConversationId: conversationId,
+          PromptsAndAnswers: conversation.PromptsAndAnswers,
+          Date: conversation.Date,
+          Ended: conversation.Ended || false,
+          EndedAt: conversation.EndedAt || null,
         });
-
-        allConversationsList.push(userConvoList);
       });
 
-      return allConversationsList;
-    } else {
-      throw new Error('No conversations found in the database.');
-    }
+      allConversationsList.push(userConvoList);
+    });
   }
+
+  // Process multi-user conversations
+  if (multiUserConversationsSnapshot.exists()) {
+    const multiUserConversationsData = multiUserConversationsSnapshot.val();
+
+    // Since multi-user conversations are not tied to a single user, we'll collect them separately
+    Object.entries(multiUserConversationsData).forEach(([conversationId, conversationData]) => {
+      allConversationsList.push({
+        ConversationId: conversationId,
+        PromptsAndAnswers: conversationData.PromptsAndAnswers,
+        Date: conversationData.Date,
+        Ended: conversationData.Ended || false,
+        EndedAt: conversationData.EndedAt || null,
+        Users: Object.keys(conversationData.Users),
+      });
+    });
+  }
+
+  if (allConversationsList.length > 0) {
+    return allConversationsList;
+  } else {
+    throw new Error('No conversations found in the database.');
+  }
+}
 
   // Get conversations by date range
   async getConversationsByDateRange(userId, startDate, endDate) {
