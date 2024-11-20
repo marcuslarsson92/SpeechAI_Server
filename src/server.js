@@ -11,7 +11,7 @@ import { franc } from 'franc';
 
 const app = express();
 const multerC = multer();
-const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
 const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS});
 const port = 3001;
@@ -29,6 +29,9 @@ function setCorsHeaders(req, res, next) {
 app.post('/api/prompt', async (req, res) => {
   try {
         const prompt = req.body.prompt;
+
+        //Byt ut nedan mot: const response = await openAIUtil.sendPrompt(prompt);
+
         const chatResponse = await openai.chat.completions.create({
           messages: [{ role: 'system', content: prompt}],
           model: 'chatgpt-4o-latest',
