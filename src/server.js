@@ -30,10 +30,10 @@ app.post('/api/prompt', async (req, res) => {
   try {
         const prompt = req.body.prompt;
 
-        //Byt ut nedan mot: const response = await openAIUtil.sendPrompt(instructions, prompt);
+        //Byt ut nedan mot: const response = await openAIUtil.sendPrompt(prompt, instructions);
 
         const chatResponse = await openai.chat.completions.create({
-          messages: [{ role: 'system', content: prompt}],
+          messages: [{ role: 'system', content: prompt}],               //user, inte system !!!
           model: 'chatgpt-4o-latest',
           max_tokens: 100,
         });

@@ -1,18 +1,21 @@
 import 'dotenv/config';
 import OpenAI from 'openai';
 
+
+
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
 const model = 'chatgpt-4o-latest';
 const maxTokens = 100;
 
 const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
 
+    //Använda flagga för att styra vilken typ av analys / feedback som ska fixas
 
     //KOPPLA TRANSKRIBERINGARNA TILL OLIKA ANVÄNDARE PÅ NÅT SÄTT
     //Ändra från 'system' till 'user' efter role, även i server.js
     //instructions + prompt
     //Gör instructions dynamisk - skicka med från frontend
-async function giveInstructions(instructions, transcription) {
+async function giveInstructions(transcription, instructions) {
 
         try {
             const prompt = transcription.body.prompt;        
@@ -50,7 +53,7 @@ function wordCount(transcription) {
 
 
 function vocabularyRichness(transcription) {
-    return `Analysera följande text och identifiera bredden och variationen i ordförrådet: ${transcription}`;
+    return `Analysera följande text och identifiera bredden och variationen i ordförrådet: ${transcription}`;  
 }
 
 
@@ -59,3 +62,4 @@ function vocabularyRichness(transcription) {
 function grammaticalErrors(transcription) {
     return `Analysera följande text och identifiera grammatiska fel och förbättringar: ${transcription}`;
 }
+
