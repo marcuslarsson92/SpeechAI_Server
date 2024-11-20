@@ -4,55 +4,56 @@ import multer from 'multer';
 import speech from '@google-cloud/speech';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import OpenAI from 'openai';
+import cors from 'cors';
 import fs from 'fs';
 import { Readable } from 'stream';
-import cors from 'cors';
 import { franc } from 'franc';
 
+import Database from './database.js';
+
 const app = express();
-const multerC = multer();
-const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY});
-const ttsClient = new TextToSpeechClient();
-const speechClient = new speech.SpeechClient({keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS});
-const port = 3001;
-
-app.use(setCorsHeaders);
 app.use(express.json());
+app.use(cors());
 
-function setCorsHeaders(req, res, next) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  next();
-}
+const upload = multer();
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const ttsClient = new TextToSpeechClient();
+const speechClient = new speech.SpeechClient({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+});
+
+const database = new Database();
+const port = 3000;
+
+// --------------------- Prompt Endpoint --------------------- //
 
 app.post('/api/prompt', async (req, res) => {
   try {
-        const prompt = req.body.prompt;
-        const chatResponse = await openai.chat.completions.create({
-          messages: [{ role: 'system', content: prompt}],
-          model: 'chatgpt-4o-latest',
-          max_tokens: 100,
-        });
-        const replyText = chatResponse.choices[0].message.content;
-        console.log(replyText);
-        res.json({ response: replyText });
-      } catch (error) {
-        console.error('Error handling request; ', error);
-        res.status(500).json({ error: 'An error occurred. Please try again. '});
-      }
+    const prompt = req.body.prompt;
+    const chatResponse = await openai.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'gpt-4',
+      max_tokens: 100,
+    });
+    const replyText = chatResponse.choices[0].message.content;
+    console.log(replyText);
+    res.json({ response: replyText });
+  } catch (error) {
+    console.error('Error handling request:', error);
+    res.status(500).json({ error: 'An error occurred. Please try again.' });
+  }
+});
 
-  });
+// --------------------- Audio Processing Endpoint --------------------- //
 
-
-app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
-  let tempAudioPath = 'temp_audio.mp3';
+app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
+  const userIds = req.body.userIds; // Expecting an array of user IDs
+  const conversationId = req.body.conversationId || null; // Optional
+  const isMultiUser = req.body.isMultiUser === 'true'; // Flag indicating if it's a multi-user conversation
 
   try {
-    fs.writeFileSync(tempAudioPath, req.file.buffer);
-    const audioBytes = fs.readFileSync(tempAudioPath).toString('base64');
-
-    // Skicka till Google Speech-to-Text
+    // Process the audio with Google Speech-to-Text
+    const audioBytes = req.file.buffer.toString('base64');
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
@@ -64,21 +65,46 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     });
 
     const transcription = speechResponse.results
-      .map(result => result.alternatives[0].transcript)
+      .map((result) => result.alternatives[0].transcript)
       .join('\n');
+    console.log('Transcription:', transcription);
 
-    console.log('Transkription:', transcription);
+    // If the prompt is "End conversation", end the conversation
+    if (transcription.trim().toLowerCase() === 'end conversation') {
+      // Generate audio response saying "Conversation ended"
+      const responseText = 'Conversation ended';
+      const [ttsResponse] = await ttsClient.synthesizeSpeech({
+        input: { text: responseText },
+        voice: { languageCode: 'sv-SE', ssmlGender: 'NEUTRAL' },
+        audioConfig: { audioEncoding: 'MP3' },
+      });
+      const responseAudioBuffer = ttsResponse.audioContent;
 
-    // Skicka transkriptionen till OpenAI
+      // End the conversation without saving the prompt and response
+      if (isMultiUser) {
+        await database.endMultiUserConversation(conversationId);
+      } else {
+        await database.endConversation(userIds[0], conversationId);
+      }
+
+      // Send audio response to client
+      res.set('Content-Type', 'audio/mp3');
+      res.send(responseAudioBuffer);
+
+      return; // Exit the function to prevent further processing
+    }
+
+    // Process prompt with OpenAI
     const chatResponse = await openai.chat.completions.create({
-      messages: [{ role: 'system', content: transcription }],
-      model: 'gpt-4o',
+      messages: [{ role: 'user', content: transcription }],
+      model: 'gpt-4',
       max_tokens: 50,
     });
 
     const replyText = chatResponse.choices[0].message.content;
-    console.log('GPT-4 Svar:', replyText);
+    console.log('OpenAI Response:', replyText);
 
+    // Detect language of replyText
     let replyLanguageCode = 'sv-SE';
     const detectedLang = franc(replyText, { minLength: 3 });
     if (detectedLang === 'eng') {
@@ -96,7 +122,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       replyLanguageCode = 'sv-SE';
     }
 
-    // Konvertera svaret till tal med Google Text-to-Speech
+    // Convert OpenAI response to audio
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
       input: { text: replyText },
       voice: {
@@ -105,19 +131,247 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       },
       audioConfig: { audioEncoding: 'MP3' },
     });
+    const answerAudioBuffer = ttsResponse.audioContent;
 
+    // Save conversation with both text and audio
+    if (isMultiUser) {
+      const newConversationId = await database.saveMultiUserConversation(
+        userIds,
+        transcription,
+        replyText,
+        req.file.buffer,
+        answerAudioBuffer,
+        conversationId
+      );
+
+      // Optionally send back the conversationId to the client
+      res.set('Conversation-Id', newConversationId);
+    } else {
+      const newConversationId = await database.saveConversation(
+        userIds[0],
+        transcription,
+        replyText,
+        req.file.buffer,
+        answerAudioBuffer,
+        conversationId
+      );
+      // Optionally send back the conversationId to the client
+      res.set('Conversation-Id', newConversationId);
+    }
+
+    // Send audio response to client
     res.set('Content-Type', 'audio/mp3');
-    res.send(ttsResponse.audioContent);
+    res.send(answerAudioBuffer);
   } catch (error) {
-    console.error('Fel vid bearbetning:', error);
-    res.status(500).send('Serverfel');
-  } finally {
-    if (fs.existsSync(tempAudioPath)) {
-      fs.unlinkSync(tempAudioPath);
+    console.error('Error processing audio:', error);
+    res.status(500).send('Server error');
+  }
+});
+
+// --------------------- User Handling Endpoints --------------------- //
+
+// POST endpoint to register a new user
+app.post('/register', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await database.registerUser(email, password);
+    res.status(200).send(result);
+  } catch (error) {
+    console.error('Error saving user data:', error);
+    if (
+      error.message.includes('Email and password are required.') ||
+      error.message.includes('Invalid email format.')
+    ) {
+      res.status(400).send(error.message);
+    } else if (
+      error.message.includes('Email is already in use.') ||
+      error.message.includes('Password is already in use.')
+    ) {
+      res.status(409).send(error.message);
+    } else {
+      res.status(500).send('Internal server error.');
     }
   }
 });
 
+// POST endpoint for user login
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const userData = await database.loginUser(email, password);
+    res.status(200).send(userData);
+  } catch (error) {
+    console.error('Error logging in user:', error);
+    if (error.message.includes('Email and password are required.')) {
+      res.status(400).send({ message: error.message });
+    } else if (error.message.includes('Invalid email or password.')) {
+      res.status(401).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// DELETE endpoint to delete a user by ID
+app.delete('/delete-user/:id', async (req, res) => {
+  const userId = req.params.id;
+
+  try {
+    const result = await database.deleteUser(userId);
+    res.status(200).send(result);
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    if (error.message.includes('not found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// PUT endpoint to update a user's email, password, or admin status
+app.put('/update-user/:id', async (req, res) => {
+  const userId = req.params.id;
+  const { email, password, admin } = req.body;
+
+  if (!email && !password && admin === undefined) {
+    return res.status(400).send({
+      message: 'At least one field (email, password, admin) must be provided for update.',
+    });
+  }
+
+  try {
+    let updates = {};
+    if (email) updates.Email = email;
+    if (password) updates.Password = password;
+    if (admin !== undefined) updates.Admin = admin;
+
+    await database.updateUser(userId, updates);
+    res.status(200).send({ message: `User with ID ${userId} updated successfully.` });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+// GET endpoint to fetch user data by ID
+app.get('/get-user/:id', async (req, res) => {
+  const userId = req.params.id;
+
+  try {
+    const userData = await database.getUserById(userId);
+    res.status(200).send(userData);
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    if (error.message.includes('not found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// GET endpoint to fetch all users in the database
+app.get('/get-all-users', async (req, res) => {
+  try {
+    const usersList = await database.getAllUsers();
+    res.status(200).send(usersList);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    if (error.message.includes('No users found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// PUT endpoint to toggle admin status
+app.put('/toggle-admin-status', async (req, res) => {
+  const { requestingUserId, targetUserId } = req.body;
+
+  try {
+    const result = await database.toggleAdminStatus(requestingUserId, targetUserId);
+    res.status(200).send(result);
+  } catch (error) {
+    console.error('Error toggling admin status:', error);
+    if (error.message.includes('Permission denied')) {
+      res.status(403).send({ message: error.message });
+    } else if (error.message.includes('Target user not found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// --------------------- Conversation Handling Endpoints --------------------- //
+
+// GET endpoint to fetch all conversations for a specific user
+app.get('/get-user-conversations/:userId', async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    const { singleUserConversations, multiUserConversations } =
+      await database.getAllConversationsForUser(userId);
+    res.status(200).send({ singleUserConversations, multiUserConversations });
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+// GET endpoint to fetch all conversations for all users
+app.get('/get-all-conversations', async (req, res) => {
+  try {
+    const allConversationsList = await database.getAllConversations();
+    res.status(200).send(allConversationsList);
+  } catch (error) {
+    console.error('Error fetching all conversations:', error);
+    if (error.message.includes('No conversations found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// POST endpoint to fetch conversations by userId and date range
+app.post('/get-conversations', async (req, res) => {
+  const { userId, startDate, endDate } = req.body;
+
+  try {
+    const result = await database.getConversationsByDateRange(userId, startDate, endDate);
+    res.status(200).send(result);
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    if (error.message.includes('No conversations found')) {
+      res.status(404).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+
+// --------------------- Audio Handling Endpoints --------------------- //
+
+// GET endpoint to retrieve audio files
+app.get('/get-audio-files', async (req, res) => {
+  const { userId, conversationId } = req.query;
+
+  try {
+    const audioFiles = await database.getAudioFiles({ userId, conversationId });
+    res.status(200).json(audioFiles);
+  } catch (error) {
+    console.error('Error retrieving audio files:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+// --------------------- Start the Server --------------------- //
+
 app.listen(port, () => {
-  console.log('Servern körs på port '+ port);
+  console.log(`Server is running on port ${port}`);
 });
