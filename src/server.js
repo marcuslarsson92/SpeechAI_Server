@@ -58,13 +58,14 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
-        encoding: 'MP3',
+        encoding: 'WEBM_OPUS',
         sampleRateHertz: 48000,
         languageCode: 'sv-SE',
         alternativeLanguageCodes: ['en-US', 'es-ES', 'de-DE', 'fr-FR'],
       },
     });
 
+    console.log('speechResponse:', speechResponse);
     const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
     console.log('Transkription:', transcription);
 
@@ -85,6 +86,8 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       console.warn('Language not recognized. Using default language code.');
       replyLanguageCode = 'sv-SE';
     }
+    console.log("detectedLang: " + detectedLang);
+    console.log("replyLanguageCode: " + replyLanguageCode);
 
     if (transcription.trim().toLowerCase() === 'end conversation') {
       const responseText = 'Conversation ended';
@@ -102,10 +105,12 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       } else {
         await database.endConversation(userIds[0], conversationId);
       }
-    }
-
+    
     res.set('Content-Type', 'audio/mp3');
     res.send(responseAudioBuffer);
+    return;
+    }
+  
 
     //Process prompt with OpenAI
     const chatResponse = await openai.chat.completions.create({
