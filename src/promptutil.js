@@ -1,11 +1,8 @@
 import 'dotenv/config';
 import OpenAI from 'openai';
 
-
-
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
 const model = 'chatgpt-4o-latest';
-const maxTokens = 100;
 
 const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
 
@@ -15,7 +12,40 @@ const instructions = "Du är en AI-lärare som hjälper människor att lära sig
     //Ändra från 'system' till 'user' efter role, även i server.js
     //instructions + prompt
     //Gör instructions dynamisk - skicka med från frontend
-async function giveInstructions(transcription, instructions) {
+
+
+    export const getOpenAIResponse = async (prompt, instructions = '') => {
+        const messages = instructions
+          ? [{ role: 'system', content: instructions }, { role: 'user', content: prompt }]
+          : [{ role: 'user', content: prompt }];
+      
+        const chatResponse = await openai.chat.completions.create({
+          messages,
+          model,
+          max_tokens: maxTokens,
+        });
+      
+        return chatResponse.choices[0].message.content;
+      };
+
+
+      export const getWordCount = (transcription) => {
+        const words = transcription.split(' ');
+        return words.length;
+      };
+      
+      export const getVocabularyRichness = (transcription) => {
+        return `Analysera följande text och identifiera bredden och variationen i ordförrådet: ${transcription}`;
+      };
+
+
+
+
+
+      
+
+
+async function promptOpenAI(transcription, instructions) {
 
         try {
             const prompt = transcription.body.prompt;        
@@ -24,14 +54,12 @@ async function giveInstructions(transcription, instructions) {
                 const chatResponse = await openai.chat.completions.create({
                 messages: [{role: 'system', content: instructions},  //Instruktioner till hur OpenAI ska bete sig
                     { role: 'user', content: prompt}],    //Prompten från användaren/-na
-                model: model,
-                max_tokens: maxTokens,
+                model: model
                 });
             } else if (!instructions) {
                 const chatResponse = await openai.chat.completions.create({
                 messages: [{ role: 'user', content: prompt}],    //Prompten från användaren/-na
-                model: model,
-                max_tokens: maxTokens,
+                model: model
                 });
         }
 
