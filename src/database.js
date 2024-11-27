@@ -100,7 +100,7 @@ class Database {
     return { message: 'User registered successfully', userId };
   }
     // Login a user
-    async loginUser(email, password) {
+    async loginUser(email, password) { /// Lösen krav
         if (!email || !password) {
           throw new Error('Email and password are required.');
         }
@@ -129,6 +129,7 @@ class Database {
         // Return user data (excluding password)
         return { userId: userId, Email: userData.Email, Admin: userData.Admin };
       }
+
 
   // Delete a user by ID
   async deleteUser(userId) {
@@ -176,6 +177,20 @@ class Database {
       throw new Error('No users found in the database.');
     }
   }
+
+  // Get User By Email
+  async getUserIdByEmail(email) {
+    const usersRef = this.db.ref('users');
+    const snapshot = await usersRef.orderByChild('Email').equalTo(email).once('value');
+    if (snapshot.exists()) {
+      const userData = snapshot.val();
+      const userId = Object.keys(userData)[0];
+      return userId;
+    } else {
+      throw new Error(`User with email ${email} not found.`);
+    }
+  }
+  
 
   // Toggle admin status for a user
   async toggleAdminStatus(requestingUserId, targetUserId) {
@@ -265,40 +280,77 @@ class Database {
   return conversationId;
   }
 
-  // End a conversation
+  // End a conversation ** 1234Update ***************************************************
   async endConversation(userId) {
-    if (!userId) userId = 'Guest';
+  if (!userId) userId = 'Guest';
 
-    const conversationsRef = this.db.ref(`Conversations/${userId}`);
+  const conversationsRef = this.db.ref(`Conversations/${userId}`);
 
-    // Find the ongoing conversation and mark it as ended
-    const ongoingConversationSnapshot = await conversationsRef
-      .orderByChild('Ended')
-      .equalTo(false)
-      .limitToLast(1)
-      .once('value');
-    if (ongoingConversationSnapshot.exists()) {
-      const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
-      await this.db
-        .ref(`Conversations/${userId}/${conversationKey}`)
-        .update({ Ended: true, EndedAt: this.formatDate(new Date()) });
-    }
+  // Find the latest ongoing conversation and mark it as ended
+  const ongoingConversationSnapshot = await conversationsRef
+    .orderByChild('Ended')
+    .equalTo(false)
+    .limitToLast(1)
+    .once('value');
+
+  if (ongoingConversationSnapshot.exists()) {
+    const conversationKey = Object.keys(ongoingConversationSnapshot.val())[0];
+    await conversationsRef.child(conversationKey).update({
+      Ended: true,
+      EndedAt: this.formatDate(new Date()),
+    });
+  } else {
+    console.warn(`No ongoing conversation found for user ${userId} to end.`);
   }
-  async endMultiUserConversation(conversationId) {
-    const conversationRef = this.db.ref(`MultiUserConversations/${conversationId}`);
-    const snapshot = await conversationRef.once('value');
-  
-    if (snapshot.exists()) {
-      await conversationRef.update({
+}
+
+  /*
+  async endMultiUserConversation(userIds) {
+  if (!userIds || userIds.length === 0) {
+    console.warn('No user IDs provided to end the conversation.');
+    return;
+  }
+
+  const conversationsRef = this.db.ref('MultiUserConversations');
+
+  // Query for ongoing conversations
+  const snapshot = await conversationsRef
+    .orderByChild('Ended')
+    .equalTo(false)
+    .once('value');
+
+  if (snapshot.exists()) {
+    const conversations = snapshot.val();
+    let conversationToEnd = null;
+
+    // Find the latest conversation involving the exact set of userIds
+    for (const [conversationId, conversationData] of Object.entries(conversations)) {
+      const conversationUserIds = Object.keys(conversationData.Users);
+      const allUsersMatch =
+        conversationUserIds.length === userIds.length &&
+        userIds.every((userId) => conversationUserIds.includes(userId));
+
+      if (allUsersMatch) {
+        conversationToEnd = conversationId;
+        break;
+      }
+    }
+
+    if (conversationToEnd) {
+      await conversationsRef.child(conversationToEnd).update({
         Ended: true,
         EndedAt: this.formatDate(new Date()),
       });
     } else {
-      throw new Error(`Conversation ${conversationId} not found.`);
+      console.warn('No matching ongoing conversation found to end.');
     }
+  } else {
+    console.warn('No ongoing multi-user conversations found.');
   }
+}
 
-  // Get conversations for a specific user
+*/
+  // Get conversations for a specific user ** 1234Update **
   async getUserConversations(userId) {
     if (!userId) userId = 'Guest';
 
@@ -318,6 +370,7 @@ class Database {
       throw new Error('No conversations found for this user.');
     }
   }
+
   async getMultiUserConversationsForUser(userId) {
     const conversationsRef = this.db.ref('MultiUserConversations');
     const snapshot = await conversationsRef.orderByChild(`Users/${userId}`).equalTo(true).once('value');
@@ -336,6 +389,7 @@ class Database {
       return []; // No conversations found for this user
     }
   }
+
   async getAllMultiUserConversations() {
     const conversationsRef = this.db.ref('MultiUserConversations');
     const snapshot = await conversationsRef.once('value');
@@ -361,7 +415,7 @@ class Database {
     }
   }    
 
-  //  Get all conversations for a specific user
+  //  Get all conversations for a specific user ** 1234Update *****************************************
   async getAllConversationsForUser(userId) {
     // Get single-user conversations
     const singleUserConversations = await this.getUserConversations(userId);
@@ -376,7 +430,7 @@ class Database {
     };
   }  
 
-  // Get all conversations for all users, including multi-user conversations
+  // Get all conversations for all users, including multi-user conversations ** 1234Update ******************************
 async getAllConversations() {
   const conversationsRef = this.db.ref('Conversations');
   const multiUserConversationsRef = this.db.ref('MultiUserConversations');
@@ -483,13 +537,16 @@ async getAllConversations() {
       throw new Error('No conversations found.');
     }
   }
-  async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer, conversationId = null) {
+
+  /* 
+  async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
     if (!userIds || userIds.length === 0) throw new Error('At least one user ID must be provided.');
   
     // Generate a conversation ID if not provided
-    if (!conversationId) {
-      conversationId = this.generateId();
-    }
+   let conversationId;
+
+   conversationId = await this.findOngoingMultiUserConversation(userIds);
+
   
     // Upload audio files and get URLs
     const promptAudioURL = await this.uploadAudio(
@@ -543,6 +600,7 @@ async getAllConversations() {
   
     return conversationId;
   }
+*/
   
 
   // --------------------- Audio-Related Methods --------------------- //
