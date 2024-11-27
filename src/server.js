@@ -116,7 +116,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   
 
     //Process prompt with OpenAI
-    const chatResponse = await openai.chat.completions.create({
+  /*  const chatResponse = await openai.chat.completions.create({
       messages: [{ role: 'system', content: transcription }],
       model: 'gpt-4o',
       max_tokens: 100,
@@ -124,6 +124,9 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
 
     const replyText = chatResponse.choices[0].message.content;
     console.log('OpenAI Response: ', replyText);
+    */
+
+    const replyText = await getOpenAIResponse(transcription);
 
 
     // Convert OpenAI response to audio
