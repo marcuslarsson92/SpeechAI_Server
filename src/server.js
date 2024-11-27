@@ -120,7 +120,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     });
 
     const replyText = chatResponse.choices[0].message.content;
-    console.log('OpenAI Response: ', replyText);
+    console.log('OpenAI Response TEST: ', replyText);
 
 
     // Convert OpenAI response to audio
@@ -131,8 +131,12 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     });
 
     const answerAudioBuffer = ttsResponse.audioContent;
+    console.log('Type of audioContent:', typeof ttsResponse.audioContent);
+
+    console.log('*********************Answer audio buffer:', answerAudioBuffer);
 
     if (isMultiUser) {
+      console.log('********* is multi-user');
       const newConversationId = await database.saveMultiUserConversation(
         userIds,
         transcription,
@@ -142,7 +146,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
         conversationId
       );
 
-    } else {
+    } /*else {
       const newConversationId = await database.saveConversation(
         userIds[0],
         transcription,
@@ -152,8 +156,9 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
         conversationId
       );
     }
+      */
 
-    res.set('Content-Type', 'audio/mp3');
+    res.set('Content-Type', 'audio/mpeg');
     res.send(answerAudioBuffer);
   } catch (error) {
     console.error('Error processing audio:', error);
