@@ -309,7 +309,8 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
     res.status(200).send({ singleUserConversations, multiUserConversations });
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    res.status(500).send({ message: 'Internal server error.' });
+    //res.status(500).send({ message: 'Internal server error.' });
+    res.status(error.statusCode || 500).send({ message: error.message });
   }
 });
 
@@ -317,14 +318,15 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
 // GET endpoint to fetch all conversations for all users *** Update for guest
 app.get('/get-all-conversations', async (req, res) => {
   try {
-    const allConversationsList = await database.getAllConversations();
+    const allConversationsList = await fetchAllConversations(); //await database.getAllConversations();
     res.status(200).send(allConversationsList);
   } catch (error) {
     console.error('Error fetching all conversations:', error);
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      res.status(500).send({ message: 'Internal server error.' });
+      //res.status(500).send({ message: 'Internal server error.' });
+      res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
 });
@@ -341,7 +343,8 @@ app.post('/get-conversations', async (req, res) => {
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      res.status(500).send({ message: 'Internal server error.' });
+      //res.status(500).send({ message: 'Internal server error.' });
+      res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
 });
@@ -361,6 +364,117 @@ app.get('/get-audio-files', async (req, res) => {
   }
 });
 
+
+// --------------------- Analysis Endpoints --------------------- //
+
+app.get('/api/analysis', async (req, res) => {
+
+
+  
+});
+
+
+
+app.get('/api/analysis-by-id/:userId', async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);   
+    res.status(200).send({ singleUserConversations, multiUserConversations });
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+   // res.status(500).send({ message: 'Internal server error.' });
+   res.status(error.statusCode || 500).send({ message: error.message });
+  }
+
+  
+});
+
+// --------------------- Analysis Handling --------------------- //       Flytta till en egen fil/klass?
+
+const fetchAllConversations = async () => {
+  try {
+    return await database.getAllConversations();
+
+  } catch (error) {
+    throw error; //Hanteras av metoden som kallar
+}};
+
+
+
+const fetchConversationsById = async () => {
+  try {
+    return await database.getAllConversations();
+
+  } catch (error) {
+    throw error; //Hanteras av metoden som kallar
+}};
+
+
+const fetchConversationsByIdAndRange = async () => {
+  try {
+    return await database.getAllConversations();
+
+  } catch (error) {
+    throw error; //Hanteras av metoden som kallar
+}};
+
+
+
+
+///
+
+const fetchAllConversations = async () => {
+  try {
+    const allConversationsList = await database.getAllConversations();
+    if (!allConversationsList || allConversationsList.length === 0) {
+      throw new Error('No conversations found');
+    }
+    return allConversationsList;
+  } catch (error) {
+    if (error.message.includes('No conversations found')) {
+      error.statusCode = 404;
+    } else {
+      error.statusCode = 500;
+    }
+    throw error;
+  }
+};
+
+const fetchUserConversations = async (userId) => {
+  try {
+    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
+    return { singleUserConversations, multiUserConversations };
+  } catch (error) {
+    error.statusCode = 500;
+    throw error;
+  }
+};
+
+const fetchConversationsByDateRange = async (userId, startDate, endDate) => {
+  try {
+    const result = await database.getConversationsByDateRange(userId, startDate, endDate);
+    if (!result || result.length === 0) {
+      throw new Error('No conversations found in the given date range');
+    }
+    return result;
+  } catch (error) {
+    if (error.message.includes('No conversations found')) {
+      error.statusCode = 404;
+    } else {
+      error.statusCode = 500;
+    }
+    throw error;
+  }
+};
+
+
+
+
+// --------------------- Start server --------------------- //
+
 app.listen(3001, () => {
   console.log('Servern körs på port 3001');
 });
+
+
