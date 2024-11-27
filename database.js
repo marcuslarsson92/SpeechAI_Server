@@ -5,7 +5,11 @@ import admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 
 // Initialize Firebase Admin with service account credentials
+<<<<<<< Updated upstream
 const serviceAccount = JSON.parse(fs.readFileSync('//Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
+=======
+const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
+>>>>>>> Stashed changes
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),

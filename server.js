@@ -100,6 +100,30 @@ if (!emailRegex.test(email)) {
   }
 });
 
+<<<<<<< Updated upstream
+=======
+// POST endpoint for user login
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const userData = await database.loginUser(email, password);
+    if (!userData) {
+      return res.status(401).send({ message: 'Ogiltig e-post eller lösenord.' });
+    }
+    res.status(200).send(userData);
+  } catch (error) {
+    console.error('Error logging in user:', error);
+    if (error.message.includes('Email and password are required.')) {
+      res.status(400).send({ message: error.message });
+    } else if (error.message.includes('Invalid email or password.')) {
+      res.status(401).send({ message: error.message });
+    } else {
+      res.status(500).send({ message: 'Internal server error.' });
+    }
+  }
+});
+>>>>>>> Stashed changes
 
 // DELETE endpoint to delete a user by ID
 app.delete('/delete-user/:id', async (req, res) => {
