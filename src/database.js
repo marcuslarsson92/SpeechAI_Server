@@ -297,7 +297,7 @@ class Database {
     }
   }
 
-  // Get conversations for a specific user
+  // Get conversations for a specific user ** 1234Update* *
   async getUserConversations(userId) {
     if (!userId) userId = 'Guest';
 
@@ -360,7 +360,7 @@ class Database {
     }
   }    
 
-  //  Get all conversations for a specific user
+  //  Get all conversations for a specific user ** 1234Update **
   async getAllConversationsForUser(userId) {
     // Get single-user conversations
     const singleUserConversations = await this.getUserConversations(userId);
@@ -375,7 +375,7 @@ class Database {
     };
   }  
 
-  // Get all conversations for all users, including multi-user conversations
+  // Get all conversations for all users, including multi-user conversations ** 1234Update **
 async getAllConversations() {
   const conversationsRef = this.db.ref('Conversations');
   const multiUserConversationsRef = this.db.ref('MultiUserConversations');
