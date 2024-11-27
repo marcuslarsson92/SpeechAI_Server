@@ -8,6 +8,7 @@ import fs from 'fs';
 import { Readable } from 'stream';
 import cors from 'cors';
 import { franc } from 'franc';
+import { getOpenAIResponse } from './promptutil';
 
 const app = express();
 const multerC = multer();
@@ -74,14 +75,16 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     console.log('Transkription:', transcription);
 
     // Skicka transkriptionen till OpenAI
-    const chatResponse = await openai.chat.completions.create({
-      messages: [{ role: 'system', content: transcription }],
+    /*const chatResponse = await openai.chat.completions.create({
+      messages: [{ role: 'system', content: transcription }],   // BYT TILL getOpenAIResponse!!
       model: 'gpt-4o',
       max_tokens: 50,
     });
 
-    const replyText = chatResponse.choices[0].message.content;
-    console.log('GPT-4 Svar:', replyText);
+    const replyText = chatResponse.choices[0].message.content;  // BYT TILL getOpenAIResponse!!
+    console.log('GPT-4 Svar:', replyText); */
+
+    const replyText = await getOpenAIResponse(transcription); 
 
     let replyLanguageCode = 'sv-SE';
     const detectedLang = franc(replyText, { minLength: 3 });
@@ -121,6 +124,13 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     }
   }
 });
+
+
+
+
+
+
+
 
 app.listen(port, () => {
   console.log('Servern körs på port '+ port);
