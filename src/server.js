@@ -58,7 +58,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
-        encoding: 'WEBM_OPUS',
+        encoding: 'MP3',
         sampleRateHertz: 48000,
         languageCode: 'sv-SE',
         alternativeLanguageCodes: ['en-US', 'es-ES', 'de-DE', 'fr-FR'],
@@ -105,12 +105,11 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       } else {
         await database.endConversation(userIds[0], conversationId);
       }
-    
+
     res.set('Content-Type', 'audio/mp3');
     res.send(responseAudioBuffer);
     return;
     }
-  
 
     //Process prompt with OpenAI
     const chatResponse = await openai.chat.completions.create({
@@ -121,7 +120,6 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
 
     const replyText = chatResponse.choices[0].message.content;
     console.log('OpenAI Response TEST: ', replyText);
-
 
     // Convert OpenAI response to audio
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
@@ -163,7 +161,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   } catch (error) {
     console.error('Error processing audio:', error);
     res.status(500).send('Server error');
-  } 
+  }
 });
 
 // --------------------- User Handling Endpoints --------------------- //
