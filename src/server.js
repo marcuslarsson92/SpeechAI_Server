@@ -9,6 +9,8 @@ import { Readable } from 'stream';
 import cors from 'cors';
 import { franc } from 'franc';
 import Database from './database.js';
+import { getOpenAIResponse } from './promptutil';
+
 
 const app = express();
 const multerC = multer();
@@ -30,12 +32,13 @@ function setCorsHeaders(req, res, next) {
 app.post('/api/prompt', async (req, res) => {
   try {
         const prompt = req.body.prompt;
+     /*
         const chatResponse = await openai.chat.completions.create({
           messages: [{ role: 'system', content: prompt}],
           model: 'chatgpt-4o-latest',
           max_tokens: 100,
-        });
-        const replyText = chatResponse.choices[0].message.content;
+        }); */
+        const replyText = await getOpenAIResponse(prompt); //chatResponse.choices[0].message.content;
         console.log(replyText);
         res.json({ response: replyText });
       } catch (error) {
