@@ -19,6 +19,7 @@ const port = 3001;
 app.use(setCorsHeaders);
 app.use(express.json());
 
+
 function setCorsHeaders(req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
