@@ -8,7 +8,9 @@ import fs from 'fs';
 import { Readable } from 'stream';
 import cors from 'cors';
 import { franc } from 'franc';
-import { getOpenAIResponse } from './promptutil';
+import * as promptutil from './promptutil.js';
+
+
 
 const app = express();
 const multerC = multer();
@@ -84,7 +86,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const replyText = chatResponse.choices[0].message.content;  // BYT TILL getOpenAIResponse!!
     console.log('GPT-4 Svar:', replyText); */
 
-    const replyText = await getOpenAIResponse(transcription); 
+    const replyText = await promptutil.getOpenAIResponse(transcription); 
 
     let replyLanguageCode = 'sv-SE';
     const detectedLang = franc(replyText, { minLength: 3 });
