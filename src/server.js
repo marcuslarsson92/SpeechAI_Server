@@ -62,7 +62,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const [speechResponse] = await speechClient.recognize({
       audio: { content: audioBytes },
       config: {
-        encoding: 'WEBM_OPUS',
+        encoding: 'MP3',
         sampleRateHertz: 48000,
         languageCode: 'sv-SE',
         alternativeLanguageCodes: ['en-US', 'es-ES', 'de-DE', 'fr-FR'],
@@ -83,7 +83,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const replyText = chatResponse.choices[0].message.content;  // BYT TILL getOpenAIResponse!!
     console.log('GPT-4 Svar:', replyText); */
 
-    const replyText = await promptutil.getOpenAIResponse(transcription); 
+    replyText = await promptutil.getOpenAIResponse(transcription); 
 
     let replyLanguageCode = 'sv-SE';
     const detectedLang = franc(transcription, { minLength: 3 });
@@ -120,12 +120,11 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
       } else {
         await database.endConversation(userIds[0], conversationId);
       }
-    
+
     res.set('Content-Type', 'audio/mp3');
     res.send(responseAudioBuffer);
     return;
     }
-  
 
     //Process prompt with OpenAI
   /*  const chatResponse = await openai.chat.completions.create({
@@ -149,8 +148,12 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     });
 
     const answerAudioBuffer = ttsResponse.audioContent;
+    console.log('Type of audioContent:', typeof ttsResponse.audioContent);
+
+    console.log('*********************Answer audio buffer:', answerAudioBuffer);
 
     if (isMultiUser) {
+      console.log('********* is multi-user');
       const newConversationId = await database.saveMultiUserConversation(
         userIds,
         transcription,
@@ -160,7 +163,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
         conversationId
       );
 
-    } else {
+    } /*else {
       const newConversationId = await database.saveConversation(
         userIds[0],
         transcription,
@@ -170,13 +173,14 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
         conversationId
       );
     }
+      */
 
-    res.set('Content-Type', 'audio/mp3');
+    res.set('Content-Type', 'audio/mpeg');
     res.send(answerAudioBuffer);
   } catch (error) {
     console.error('Error processing audio:', error);
     res.status(500).send('Server error');
-  } 
+  }
 });
 
 // --------------------- User Handling Endpoints --------------------- //
