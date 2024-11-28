@@ -4,14 +4,10 @@ import OpenAI from 'openai';
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
 const model = 'chatgpt-4o-latest';
 
-
-
-
 const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
 
-    //Använda flagga för att styra vilken typ av analys / feedback som ska fixas
+    //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?
 
-    //KOPPLA TRANSKRIBERINGARNA TILL OLIKA ANVÄNDARE PÅ NÅT SÄTT
     //Ändra från 'system' till 'user' efter role, även i server.js
     //instructions + prompt
     //Gör instructions dynamisk - skicka med från frontend
@@ -35,7 +31,7 @@ const instructions = "Du är en AI-lärare som hjälper människor att lära sig
 
 
       //Function for getting the word count from the text transcription
-      export const getWordCount = (transcription) => {
+      export const getWordCountText = (transcription) => {
         const words = transcription.split(' ');
         return words.length;
       };
@@ -50,9 +46,10 @@ const instructions = "Du är en AI-lärare som hjälper människor att lära sig
         return getOpenAIResponse(`Analysera följande text och identifiera grammatiska fel och förbättringar: ${transcription}`);
       };
 
-    
-
-
-
+      
+      //Function for sending a prompt to OpenAI, asking for an analysis of grammatical errors and sentence construction
+      export const getFillerWordsText = async (transcription) => {
+        return getOpenAIResponse(`Analysera följande text och identifiera grammatiska fel och förbättringar: ${transcription}`);
+      };
 
 
