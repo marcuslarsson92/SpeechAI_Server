@@ -47,11 +47,15 @@ app.post('/api/prompt', async (req, res) => {
 
 
 app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
+  
   let tempAudioPath = 'temp_audio.mp3';
-  const participants = req.body.participants || []; // Mixed array of user IDs and emails
+  const participants = JSON.parse(req.body.participants || []); // Mixed array of user IDs and emails
 
   // Determine if it's a multi-user conversation based on the number of participants
   const isMultiUser = participants.length > 1;
+
+  // Process participants to get user IDs
+  const allUserIds = await processParticipants(participants);
 
 
   try {
@@ -91,14 +95,19 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     console.log("detectedLang: " + detectedLang);
     console.log("replyLanguageCode: " + replyLanguageCode);
 
-        // Handle 'terminate conversation' without saving the prompt and response
-        if (transcription.trim().toLowerCase() === 'terminate conversation') {
-          const responseText = 'Conversation ended';
-          const responseAudioBuffer = await synthesizeSpeech(responseText, replyLanguageCode);
+        // Handle 'end conversation' without saving the prompt and response
+if (transcription.trim().toLowerCase() === 'end conversation') {
+  const responseText = 'Conversation ended';
+  const [ttsResponse] = await ttsClient.synthesizeSpeech({
+    input: { text: responseText },
+    voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
+    audioConfig: { audioEncoding: 'MP3' },
+  });
+  const responseAudioBuffer = ttsResponse.audioContent;
     
           // End the conversation without saving the prompt and response
           if (allUserIds.length === 0) {
-            const userId = await database.generateGuestId(); //Ändra ***************************************************************
+            const userId = await database.generateGuestId();
             await database.endConversation(userId);
           } else if (isMultiUser) {
             // Multi-user conversation
@@ -111,7 +120,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     
           res.set('Content-Type', 'audio/mp3');
           res.send(responseAudioBuffer);
-          return; // Exit the function
+          return; 
         }
 
     //Process prompt with OpenAI
@@ -132,9 +141,6 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     });
 
     const answerAudioBuffer = ttsResponse.audioContent;
-
-    // Process participants to get user IDs
-    const allUserIds = await processParticipants(participants);
 
 // Handle cases where no user IDs are found (e.g., guest users)
 if (allUserIds.length === 0) {
@@ -299,11 +305,11 @@ async function processParticipants(participants) {
         allUserIds.push(userId);
       } catch (error) {
         console.error(`Error finding userId for email ${participant}:`, error);
-        // Optionally handle missing users
+        // Handle missing users
       }
     } else {
       console.warn(`Invalid participant identifier: ${participant}`);
-      // Optionally handle invalid entries
+      // Handle invalid entries
     }
   }
 
@@ -398,7 +404,6 @@ app.listen(3001, () => {
 });
 
 function isValidUserId(id) {
-  // Assuming user IDs are non-empty strings that do not contain '@'
   return typeof id === 'string' && id.trim() !== '' && !id.includes('@');
 }
 function isValidEmail(email) {
@@ -410,7 +415,6 @@ async function getFirstUserId(participants) {
   if (allUserIds.length > 0) {
     return allUserIds[0];
   } else {
-    // Generate a guest ID
     return await database.generateGuestId();
   }
 }

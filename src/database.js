@@ -190,7 +190,6 @@ class Database {
       throw new Error(`User with email ${email} not found.`);
     }
   }
-  
 
   // Toggle admin status for a user
   async toggleAdminStatus(requestingUserId, targetUserId) {
@@ -280,7 +279,7 @@ class Database {
   return conversationId;
   }
 
-  // End a conversation ** 1234Update ***************************************************
+  // End a conversation 
   async endConversation(userId) {
   if (!userId) userId = 'Guest';
 
