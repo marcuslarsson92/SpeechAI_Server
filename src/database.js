@@ -303,33 +303,37 @@ class Database {
   }
 }
 
-  /*
-  async endMultiUserConversation(userIds) {
+  
+async endMultiUserConversation(userIds) {
   if (!userIds || userIds.length === 0) {
     console.warn('No user IDs provided to end the conversation.');
     return;
   }
 
-  const conversationsRef = this.db.ref('MultiUserConversations');
+  const conversationsRef = this.db.ref(`MultiUserConversations`);
 
-  // Query for ongoing conversations
-  const snapshot = await conversationsRef
-    .orderByChild('Ended')
-    .equalTo(false)
-    .once('value');
+  // Retrieve all conversations
+  const snapshot = await conversationsRef.once('value');
 
   if (snapshot.exists()) {
     const conversations = snapshot.val();
     let conversationToEnd = null;
 
-    // Find the latest conversation involving the exact set of userIds
+    // Iterate through each conversation
     for (const [conversationId, conversationData] of Object.entries(conversations)) {
       const conversationUserIds = Object.keys(conversationData.Users);
+
+      // Check if all users match
       const allUsersMatch =
         conversationUserIds.length === userIds.length &&
         userIds.every((userId) => conversationUserIds.includes(userId));
 
-      if (allUsersMatch) {
+     
+      const isEnded =
+        conversationData.Ended === true;
+
+      // Check if the conversation has not ended and all userIds match
+      if (allUsersMatch && !isEnded) {
         conversationToEnd = conversationId;
         break;
       }
@@ -340,15 +344,15 @@ class Database {
         Ended: true,
         EndedAt: this.formatDate(new Date()),
       });
+      console.log(`Conversation ${conversationToEnd} has been ended.`);
     } else {
       console.warn('No matching ongoing conversation found to end.');
     }
   } else {
-    console.warn('No ongoing multi-user conversations found.');
+    console.warn('No multi-user conversations found.');
   }
 }
 
-*/
   // Get conversations for a specific user ** 1234Update **
   async getUserConversations(userId) {
     if (!userId) userId = 'Guest';
@@ -537,7 +541,7 @@ async getAllConversations() {
     }
   }
 
-  /* 
+   //****************************************************************************//****************************************************************************
   async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
     if (!userIds || userIds.length === 0) throw new Error('At least one user ID must be provided.');
   
@@ -599,7 +603,7 @@ async getAllConversations() {
   
     return conversationId;
   }
-*/
+
   
 
   // --------------------- Audio-Related Methods --------------------- //
