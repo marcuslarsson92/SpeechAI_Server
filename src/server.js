@@ -51,10 +51,16 @@ app.post('/api/prompt', async (req, res) => {
 
 
 app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
+  
   let tempAudioPath = 'temp_audio.mp3';
-  const userIds = req.body.userIds;
-  const conversationId = req.body.conversationId;
-  const isMultiUser = req.body.isMultiUser;
+  const participants = JSON.parse(req.body.participants || []); // Mixed array of user IDs and emails
+
+  // Determine if it's a multi-user conversation based on the number of participants
+  const isMultiUser = participants.length > 1;
+
+  // Process participants to get user IDs
+  const allUserIds = await processParticipants(participants);
+
 
   try {
     // Send to Google-Speech-To-Text
@@ -104,27 +110,33 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     console.log("detectedLang: " + detectedLang);
     console.log("replyLanguageCode: " + replyLanguageCode);
 
-    if (transcription.trim().toLowerCase() === 'end conversation') {
-      const responseText = 'Conversation ended';
-      const [ttsResponse] = await ttsClient.synthesizeSpeech({
-        input: { text: responseText },
-        voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
-        audioConfig: { audioEncoding: 'MP3' },
-      });
-
-      const responseAudioBuffer = ttsResponse.audioContent;
-
-      // End the conversation without saving the prompt and response
-      if (isMultiUser) {
-        await database.endMultiUserConversation(conversationId);
-      } else {
-        await database.endConversation(userIds[0], conversationId);
-      }
-
-    res.set('Content-Type', 'audio/mp3');
-    res.send(responseAudioBuffer);
-    return;
-    }
+        // Handle 'end conversation' without saving the prompt and response
+if (transcription.trim().toLowerCase() === 'end conversation') {
+  const responseText = 'Conversation ended';
+  const [ttsResponse] = await ttsClient.synthesizeSpeech({
+    input: { text: responseText },
+    voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
+    audioConfig: { audioEncoding: 'MP3' },
+  });
+  const responseAudioBuffer = ttsResponse.audioContent;
+    
+          // End the conversation without saving the prompt and response
+          if (allUserIds.length === 0) {
+            const userId = await database.generateGuestId();
+            await database.endConversation(userId);
+          } else if (isMultiUser) {
+            // Multi-user conversation
+            await database.endMultiUserConversation(allUserIds);
+          } else {
+            // Single-user conversation
+            const userId = allUserIds[0];
+            await database.endConversation(userId);
+          }
+    
+          res.set('Content-Type', 'audio/mp3');
+          res.send(responseAudioBuffer);
+          return; 
+        }
 
     //Process prompt with OpenAI
   /*  const chatResponse = await openai.chat.completions.create({
@@ -152,28 +164,36 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
 
     console.log('*********************Answer audio buffer:', answerAudioBuffer);
 
-    if (isMultiUser) {
-      console.log('********* is multi-user');
-      const newConversationId = await database.saveMultiUserConversation(
-        userIds,
-        transcription,
-        replyText,
-        req.file.buffer,
-        answerAudioBuffer,
-        conversationId
-      );
-
-    } /*else {
-      const newConversationId = await database.saveConversation(
-        userIds[0],
-        transcription,
-        replyText,
-        req.file.buffer,
-        answerAudioBuffer,
-        conversationId
-      );
-    }
-      */
+// Handle cases where no user IDs are found (e.g., guest users)
+if (allUserIds.length === 0) {
+  const userId = await database.generateGuestId();
+  await database.saveConversation(
+    userId,
+    transcription,
+    replyText,
+    req.file.buffer,
+    answerAudioBuffer
+  );
+/*} else if (isMultiUser) {
+  // Multi-user conversation
+  await database.saveMultiUserConversation(
+    allUserIds,
+    transcription,
+    replyText,
+    req.file.buffer,
+    answerAudioBuffer
+  );*/
+} else {
+  // Single-user conversation
+  const userId = allUserIds[0];
+  await database.saveConversation(
+    userId,
+    transcription,
+    replyText,
+    req.file.buffer,
+    answerAudioBuffer
+  );
+}
 
     res.set('Content-Type', 'audio/mpeg');
     res.send(answerAudioBuffer);
@@ -294,6 +314,30 @@ app.get('/get-all-users', async (req, res) => {
     }
   }
 });
+
+async function processParticipants(participants) {
+  const allUserIds = [];
+
+  for (const participant of participants) {
+    if (isValidUserId(participant)) {
+      allUserIds.push(participant);
+    } else if (isValidEmail(participant)) {
+      try {
+        const userId = await database.getUserIdByEmail(participant);
+        allUserIds.push(userId);
+      } catch (error) {
+        console.error(`Error finding userId for email ${participant}:`, error);
+        // Handle missing users
+      }
+    } else {
+      console.warn(`Invalid participant identifier: ${participant}`);
+      // Handle invalid entries
+    }
+  }
+
+  // Remove duplicate user IDs
+  return [...new Set(allUserIds)];
+}
 
 // PUT endpoint to toggle admin status
 app.put('/toggle-admin-status', async (req, res) => {
@@ -499,5 +543,22 @@ const fetchConversationsByDateRange = async (userId, startDate, endDate) => {
 app.listen(3001, () => {
   console.log('Servern körs på port 3001');
 });
+
+function isValidUserId(id) {
+  return typeof id === 'string' && id.trim() !== '' && !id.includes('@');
+}
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+async function getFirstUserId(participants) {
+  const allUserIds = await processParticipants(participants);
+  if (allUserIds.length > 0) {
+    return allUserIds[0];
+  } else {
+    return await database.generateGuestId();
+  }
+}
+
 
 
