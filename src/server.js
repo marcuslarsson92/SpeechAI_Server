@@ -131,7 +131,7 @@ if (transcription.trim().toLowerCase() === 'end conversation') {
     });
 
     const replyText = chatResponse.choices[0].message.content;
-    console.log('OpenAI Response: ', replyText);
+    console.log('OpenAI Response TEST: ', replyText);
 
     // Convert OpenAI response to audio
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
@@ -141,6 +141,9 @@ if (transcription.trim().toLowerCase() === 'end conversation') {
     });
 
     const answerAudioBuffer = ttsResponse.audioContent;
+    console.log('Type of audioContent:', typeof ttsResponse.audioContent);
+
+    console.log('*********************Answer audio buffer:', answerAudioBuffer);
 
 // Handle cases where no user IDs are found (e.g., guest users)
 if (allUserIds.length === 0) {
@@ -173,12 +176,12 @@ if (allUserIds.length === 0) {
   );
 }
 
-    res.set('Content-Type', 'audio/mp3');
+    res.set('Content-Type', 'audio/mpeg');
     res.send(answerAudioBuffer);
   } catch (error) {
     console.error('Error processing audio:', error);
     res.status(500).send('Server error');
-  } 
+  }
 });
 
 // --------------------- User Handling Endpoints --------------------- //
