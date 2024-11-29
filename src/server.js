@@ -411,11 +411,6 @@ app.post('/get-conversations', async (req, res) => {
 
 
 
-
-
-
-
-
 // --------------------- Audio Handling Endpoints --------------------- //
 
 // GET endpoint to retrieve audio files
@@ -435,27 +430,95 @@ app.get('/get-audio-files', async (req, res) => {
 // --------------------- Analysis Endpoints --------------------- //
 
 app.get('/api/analysis', async (req, res) => {
+  try {
+    const { singleUserConversations, multiUserConversations } = await fetchAllConversations();  
 
+    //Combine both arrays into one
+    const allConversations = [
+      ...singleUserConversations,
+      ...multiUserConversations,
+    ];
 
-  
+    //Combine all conversations into one string for analysis
+    const combinedConversations = allConversations.join(' ');
+
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
+
+    res.status(200).send(textAnalysis, wordCount);
+  } catch (error) {
+    console.error('Error performing analysis on conversations:', error);
+   // res.status(500).send({ message: 'Internal server error.' });
+   res.status(error.statusCode || 500).send({ message: error.message });
+  }   
 });
 
 
-
+//GET for fetching all conversations for a specific user, and getting them anlyzed for the history/analysis-page
 app.get('/api/analysis-by-id/:userId', async (req, res) => {
   const userId = req.params.userId;
 
   try {
-    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);   
-    res.status(200).send({ singleUserConversations, multiUserConversations });
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
+
+    //Combine both arrays into one
+    const allConversations = [
+      ...singleUserConversations,
+      ...multiUserConversations,
+    ];
+
+    //Combine all conversations into one string for analysis
+    const combinedConversations = allConversations.join(' ');
+
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back                  <-------------------   FIXA!
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
+
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////                 <-------------------   FIXA!
+    //TODO: ALTERNATIV FÖR OM MAN VILL SKICKA IN KONVERSATION FÖR KONVERSATION I STÄLLET
+
+    for (const conversation of allConversations) {
+        const textAnalysisIndividualConversation = await promptutil.getFullTextAnalysis(conversation);
+    }
+    
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    res.status(200).send(textAnalysis, wordCount);
   } catch (error) {
-    console.error('Error fetching conversations:', error);
+    console.error('Error performing analysis on conversations:', error);
    // res.status(500).send({ message: 'Internal server error.' });
    res.status(error.statusCode || 500).send({ message: error.message });
-  }
-
-  
+  }  
 });
+
+
+//GET for fetching all conversations for a specific user and range, and getting them analyzed for the history/analysis-page
+app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsByIdAndRange(userId, startDate, endDate);      
+
+    //Combine both arrays into one
+    const allConversations = [
+      ...singleUserConversations,
+      ...multiUserConversations,
+    ];
+
+    //Combine all conversations into one string, for analysis
+    const combinedConversations = allConversations.join(' ');
+
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back                                   
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);   
+
+    res.status(200).send(textAnalysis, wordCount);
+  } catch (error) {
+    console.error('Error performing analysis on conversations:', error);
+   // res.status(500).send({ message: 'Internal server error.' });
+   res.status(error.statusCode || 500).send({ message: error.message });
+  }  
+});
+
 
 // --------------------- Analysis Handling --------------------- //       Flytta till en egen fil/klass?
 
