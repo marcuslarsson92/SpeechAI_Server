@@ -470,7 +470,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     //Combine all conversations into one string for analysis
     const combinedConversations = allConversations.join(' ');
 
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back                  <-------------------   FIXA!
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
 
 
