@@ -6,14 +6,11 @@ const model = 'chatgpt-4o-latest';
 
 const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
 
-    //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?
-
-    //Ändra från 'system' till 'user' efter role, även i server.js
-    //instructions + prompt
+    //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?   
     //Gör instructions dynamisk - skicka med från frontend
 
 
-    //Dynamic function for prompting OpenAI - with our without instructions
+    //Dynamic function for prompting OpenAI - with or without instructions
     export const getOpenAIResponse = async (prompt, instructions) => {
         const messages = instructions
           ? [{ role: 'system', content: instructions }, { role: 'user', content: prompt }]

@@ -14,7 +14,7 @@ import * as promptutil from './promptutil.js';
 
 const app = express();
 const multerC = multer();
-const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS});
 const database = new Database();
@@ -365,7 +365,7 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
   const userId = req.params.userId;
 
   try {
-    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId)  // database.getAllConversationsForUser(userId);
     res.status(200).send({ singleUserConversations, multiUserConversations });
   } catch (error) {
     console.error('Error fetching conversations:', error);
@@ -396,7 +396,7 @@ app.post('/get-conversations', async (req, res) => {
   const { userId, startDate, endDate } = req.body;
 
   try {
-    const result = await database.getConversationsByDateRange(userId, startDate, endDate);
+    const result = await fetchConversationsByIdAndRange(userId, startDate, endDate);   //database.getConversationsByDateRange(userId, startDate, endDate);
     res.status(200).send(result);
   } catch (error) {
     console.error('Error fetching conversations:', error);
@@ -459,39 +459,8 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 
 // --------------------- Analysis Handling --------------------- //       Flytta till en egen fil/klass?
 
+//Function to fetch ALL conversations from the database. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
 const fetchAllConversations = async () => {
-  try {
-    return await database.getAllConversations();
-
-  } catch (error) {
-    throw error; //Hanteras av metoden som kallar
-}};
-
-
-
-const fetchConversationsById = async () => {
-  try {
-    return await database.getAllConversations();
-
-  } catch (error) {
-    throw error; //Hanteras av metoden som kallar
-}};
-
-
-const fetchConversationsByIdAndRange = async () => {
-  try {
-    return await database.getAllConversations();
-
-  } catch (error) {
-    throw error; //Hanteras av metoden som kallar
-}};
-
-
-
-
-///
-
-const fetchAllALLConversations = async () => {
   try {
     const allConversationsList = await database.getAllConversations();
     if (!allConversationsList || allConversationsList.length === 0) {
@@ -508,7 +477,8 @@ const fetchAllALLConversations = async () => {
   }
 };
 
-const fetchUserConversations = async (userId) => {
+//Function to fetch conversations, by userId, from the database. Returns a list of all the conversations or the appropriate error status code (500). Throws the error to the calling function
+const fetchConversationsById = async (userId) => {
   try {
     const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
     return { singleUserConversations, multiUserConversations };
@@ -518,7 +488,8 @@ const fetchUserConversations = async (userId) => {
   }
 };
 
-const fetchConversationsByDateRange = async (userId, startDate, endDate) => {
+//Function to fetch conversations, by userID and date range, from the databas. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
+const fetchConversationsByIdAndRange = async (userId, startDate, endDate) => {
   try {
     const result = await database.getConversationsByDateRange(userId, startDate, endDate);
     if (!result || result.length === 0) {
