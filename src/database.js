@@ -542,44 +542,75 @@ async getAllConversations() {
   }
 
    //****************************************************************************//****************************************************************************
-  async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
-    if (!userIds || userIds.length === 0) throw new Error('At least one user ID must be provided.');
+   async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
+    if (!userIds || userIds.length === 0) {
+      console.warn('No user IDs provided to save the conversation.');
+      return;
+    }
   
-    // Generate a conversation ID if not provided
-   let conversationId;
-
-   conversationId = await this.findOngoingMultiUserConversation(userIds);
-
+    const conversationsRef = this.db.ref('MultiUserConversations');
   
     // Upload audio files and get URLs
     const promptAudioURL = await this.uploadAudio(
       promptAudioBuffer,
-      `multi_conversations/${conversationId}/${this.generateId()}_prompt.mp3`
+      `multiUserConversations/${this.generateId()}/prompt.mp3`
     );
     const answerAudioURL = await this.uploadAudio(
       answerAudioBuffer,
-      `multi_conversations/${conversationId}/${this.generateId()}_answer.mp3`
+      `multiUserConversations/${this.generateId()}/answer.mp3`
     );
   
-    // Reference to the conversation
-    const conversationRef = this.db.ref(`MultiUserConversations/${conversationId}`);
-    const snapshot = await conversationRef.once('value');
+    // Retrieve all conversations
+    const snapshot = await conversationsRef.once('value');
+  
+    let conversationId = null;
+    let conversationData = null;
   
     if (snapshot.exists()) {
-      // Conversation exists, append the new prompt and answer
-      const conversationData = snapshot.val();
+      const conversations = snapshot.val();
+  
+      // Iterate through each conversation to find an ongoing one with the exact userIds
+      for (const [convId, convData] of Object.entries(conversations)) {
+        const conversationUserIds = Object.keys(convData.Users).map(String);
+        const normalizedUserIds = userIds.map(String);
+  
+        const allUsersMatch =
+          conversationUserIds.length === normalizedUserIds.length &&
+          normalizedUserIds.every((userId) => conversationUserIds.includes(userId));
+        const isEnded = convData.Ended === true;
+  
+        if (allUsersMatch && !isEnded) {
+          conversationId = convId;
+          conversationData = convData;
+          break;
+        }
+      }
+    }
+  
+    if (conversationId && conversationData) {
+      // Append to existing conversation
+      if (!conversationData.PromptsAndAnswers) {
+        conversationData.PromptsAndAnswers = [];
+      }
+  
       conversationData.PromptsAndAnswers.push({
         Prompt: prompt,
         Answer: answer,
         PromptAudioURL: promptAudioURL,
         AnswerAudioURL: answerAudioURL,
       });
-      conversationData.Date = this.formatDate(new Date()); // Update date
-      await conversationRef.update(conversationData);
+  
+      await conversationsRef.child(conversationId).update(conversationData);
     } else {
-      // New conversation
-      const conversationData = {
-        Users: {},
+      // Create new conversation
+      conversationId = this.generateId();
+      const usersObject = {};
+      userIds.forEach((userId) => {
+        usersObject[userId] = true;
+      });
+  
+      conversationData = {
+        Users: usersObject,
         PromptsAndAnswers: [
           {
             Prompt: prompt,
@@ -590,20 +621,14 @@ async getAllConversations() {
         ],
         Date: this.formatDate(new Date()),
         Ended: false,
-        EndedAt: null,
       };
   
-      // Add users
-      userIds.forEach((userId) => {
-        conversationData.Users[userId] = true;
-      });
-  
-      await conversationRef.set(conversationData);
+      await conversationsRef.child(conversationId).set(conversationData);
     }
   
     return conversationId;
   }
-
+  
   
 
   // --------------------- Audio-Related Methods --------------------- //

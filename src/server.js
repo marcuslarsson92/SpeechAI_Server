@@ -155,7 +155,7 @@ if (allUserIds.length === 0) {
     req.file.buffer,
     answerAudioBuffer
   );
-/*} else if (isMultiUser) {
+} else if (isMultiUser) {
   // Multi-user conversation
   await database.saveMultiUserConversation(
     allUserIds,
@@ -163,7 +163,7 @@ if (allUserIds.length === 0) {
     replyText,
     req.file.buffer,
     answerAudioBuffer
-  );*/
+  );
 } else {
   // Single-user conversation
   const userId = allUserIds[0];
