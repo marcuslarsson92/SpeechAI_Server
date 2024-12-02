@@ -184,6 +184,38 @@ if (allUserIds.length === 0) {
   }
 });
 
+// Endpoint to end a conversation
+app.post('/api/end-conversation', async (req, res) => {
+  try {
+    // Extract participants from the request body
+    const participants = JSON.parse(req.body.participants || '[]'); // Mixed array of user IDs and emails
+
+    const isMultiUser = participants.length > 1;
+
+    // Process participants to get user IDs
+    const allUserIds = await processParticipants(participants);
+
+    // Handle conversation ending logic
+    if (allUserIds.length === 0) {
+      // No user IDs provided, assume guest user
+      const guestId = await database.generateGuestId();
+      await database.endConversation(guestId);
+    } else if (isMultiUser) {
+      // Multi-user conversation
+      await database.endMultiUserConversation(allUserIds);
+    } else {
+      // Single-user conversation
+      const userId = allUserIds[0];
+      await database.endConversation(userId);
+    }
+
+    res.status(200).send('Conversation ended successfully.');
+  } catch (error) {
+    console.error('Error ending conversation:', error);
+    res.status(500).send('Server error');
+  }
+});
+
 // --------------------- User Handling Endpoints --------------------- //
 
 // POST endpoint to register a new user
@@ -296,6 +328,7 @@ app.get('/get-all-users', async (req, res) => {
   }
 });
 
+  // Function to process the array of one UserID and multiple emails and returns an array with only the correct UserIds
 async function processParticipants(participants) {
   const allUserIds = [];
 
@@ -339,15 +372,34 @@ app.put('/toggle-admin-status', async (req, res) => {
   }
 });
 
+// Endpoint to get or generate a guest ID
+app.get('/api/get-guest-id', async (req, res) => {
+  try {
+    const guestId = await database.generateGuestId();
+    res.status(200).send({ guestId });
+  } catch (error) {
+    console.error('Error generating guest ID:', error);
+    res.status(500).send({ message: 'Internal server error.' });
+  }
+});
+
+
 // --------------------- Conversation Handling Endpoints --------------------- //
 
 // GET endpoint to fetch all conversations for a specific user *** Update for guest
-app.get('/get-user-conversations/:userId', async (req, res) => {
-  const userId = req.params.userId;
+app.get('/get-user-conversations/:userId?', async (req, res) => {
+  let userId = req.params.userId;
 
   try {
-    const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
-    res.status(200).send({ singleUserConversations, multiUserConversations });
+    if (!userId) {
+      // No userId provided, get conversations for a guest user
+      const conversations = await database.getUserConversations();
+      res.status(200).send({ conversations });
+    } else {
+      // userId provided, get all conversations for the user
+      const { singleUserConversations, multiUserConversations } = await database.getAllConversationsForUser(userId);
+      res.status(200).send({ singleUserConversations, multiUserConversations });
+    }
   } catch (error) {
     console.error('Error fetching conversations:', error);
     res.status(500).send({ message: 'Internal server error.' });
@@ -355,7 +407,8 @@ app.get('/get-user-conversations/:userId', async (req, res) => {
 });
 
 
-// GET endpoint to fetch all conversations for all users *** Update for guest
+
+// GET endpoint to fetch all conversations for all users
 app.get('/get-all-conversations', async (req, res) => {
   try {
     const allConversationsList = await database.getAllConversations();
