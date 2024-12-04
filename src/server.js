@@ -49,7 +49,7 @@ app.post('/api/prompt', async (req, res) => {
 app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   
   let tempAudioPath = 'temp_audio.mp3';
-  const participants = JSON.parse(req.body.participants || []); // Mixed array of user IDs and emails
+  const participants = JSON.parse(req.body.participants || '[]'); // Mixed array of user IDs and emails
 
   // Determine if it's a multi-user conversation based on the number of participants
   const isMultiUser = participants.length > 1;
