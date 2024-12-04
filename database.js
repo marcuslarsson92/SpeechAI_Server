@@ -9,6 +9,7 @@ import { Storage } from '@google-cloud/storage';
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 const serviceAccount = JSON.parse(fs.readFileSync('//Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
 =======
 const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
@@ -18,6 +19,9 @@ const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Ke
 >>>>>>> Stashed changes
 =======
 const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Keys/empirical-vial-437223-d8-2e31195a400d.json', 'utf8'));
+>>>>>>> Stashed changes
+=======
+const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
 >>>>>>> Stashed changes
 =======
 const serviceAccount = JSON.parse(fs.readFileSync('/Users/hasansafiah/Desktop/Keys/speachai-b5ce2-firebase-adminsdk-odts8-8809efb41f.json', 'utf8'));
