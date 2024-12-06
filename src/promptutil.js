@@ -4,22 +4,25 @@ import OpenAI from 'openai';
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const model = 'chatgpt-4o-latest';
 
-let instructions = " ";  //Sätts via funktioner
+let instructions = "Du är en AI-lärare som hjälper människor vid språkinlärning";  //Sätts via funktion/setter
 
     //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?   
     //Gör instructions dynamisk - skicka med från frontend
 
 
-    //Dynamic function for prompting OpenAI - with or without instructions
+    //Function for prompting OpenAI
     export const getOpenAIResponseText = async (prompt) => {
         const messages = [{ role: 'system', content: instructions }, { role: 'user', content: prompt }];
       
-        console.log(messages);
+        console.log(messages);             //                   <------------------------------------------------ TEST   -- TA BORT
 
         const chatResponse = await openai.chat.completions.create({
           messages,
           model
         });
+
+        //Reset the instruction-prompt
+        resetInstructions();
       
         return chatResponse.choices[0].message.content;
       };
@@ -31,7 +34,7 @@ let instructions = " ";  //Sätts via funktioner
         const wordCount = getWordCountText(transcription);
 
         //Nedan ersätter de individuella anropen och skickar en enda prompt för alla analyserna
-        const instructions = "Analysera följande text för: 1. Ordförrådets rikedom: Identifiera unika ord, repetitiva mönster och den övergripande variationen i ordval. 2.Grammatiska fel: Identifiera meningar med grammatiska misstag och föreslå korrigeringar. 3.Förbättringar: Föreslå förbättringar i meningsstruktur och ordval för tydlighet och precision. 4. Fyllnadsord: Identifiera och lista fyllnadsord eller uttryck (t.ex. 'eh', 'öh', 'typ', 'du vet'), inkludera hur ofta varje ord förekommer. 4. Sammanfattning: Ge en kortfattad sammanfattning av den övergripande analysen.";
+        const instructions = "Analysera följande text för: 1. Ordförrådets rikedom: Identifiera unika ord, repetitiva mönster och den övergripande variationen i ordval. 2.Grammatiska fel: Identifiera meningar med grammatiska misstag och föreslå korrigeringar. 3.Förbättringar: Föreslå förbättringar i meningsstruktur och ordval för tydlighet och precision. 4. Fyllnadsord: Identifiera och lista fyllnadsord eller uttryck (t.ex. 'eh', 'öh', 'typ', 'du vet'), inkludera hur ofta varje ord förekommer. 4. Sammanfattning: Ge en kortfattad sammanfattning av den övergripande analysen. Varje del ska börjas med sin titel, i svaret, t.ex 'Sammanfattning'";
         setInstructions(instructions);
         const textAnalysis = await getOpenAIResponseText(transcription);
 
@@ -63,6 +66,10 @@ let instructions = " ";  //Sätts via funktioner
         return getOpenAIResponse(transcription);
       };
 
+
+      export const resetInstructions = () => {
+        instructions = "Du är en AI-lärare som hjälper människor med språkinlärning";  
+      }
 
       //Setter for the instructions variable
       export const setInstructions = (newInstructions) => {

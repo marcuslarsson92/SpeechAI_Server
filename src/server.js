@@ -465,11 +465,16 @@ app.get('/api/analysis', async (req, res) => {
     // Fallback-arrays om de är undefined eller inte arrays
     singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
     multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
-
+/*
     // Kontrollera om båda listorna är tomma
     if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
       return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
-    }
+    } */
+
+    singleUserConversations.push("Katter är söt. Hästar är stor. Kor har skor.")
+    multiUserConversations.push("Hej och hå, så kan det gå. Jag slog mitt tå.");
+    multiUserConversations.push("Välkommen till vår hemsida. Jag är glad att du vill besöka.");
+    multiUserConversations.push("Hej och hå, jag vill prata med dig.");
 
     //Combine both arrays into one
     const allConversations = [
@@ -482,6 +487,16 @@ app.get('/api/analysis', async (req, res) => {
 
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
+
+    // Dela upp textAnalysis i sektioner
+    const sections = textAnalysis
+    .replace(/\*/g, '') //Remove all asterisk characters
+    .replace(/###/g, '') // Remove all ###
+    .split(/(?=\d+\.)/)
+    .map((section) => section.trim());
+
+
+    console.log(sections);
 
     res.status(200).send({textAnalysis, wordCount});
   } catch (error) {
