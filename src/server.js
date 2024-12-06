@@ -33,13 +33,8 @@ function setCorsHeaders(req, res, next) {
 app.post('/api/prompt', async (req, res) => {
   try {
         const prompt = req.body.prompt;
-     /*
-        const chatResponse = await openai.chat.completions.create({
-          messages: [{ role: 'system', content: prompt}],               //user, inte system !!!
-          model: 'chatgpt-4o-latest',
-          max_tokens: 100,
-        }); */
-        const replyText = await getOpenAIResponse(prompt); //chatResponse.choices[0].message.content;
+
+        const replyText = await promptutil.getOpenAIResponseText(prompt); 
         console.log(replyText);
         res.json({ response: replyText });
       } catch (error) {
@@ -79,17 +74,9 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
     console.log('Transkription:', transcription);
 
-    // Skicka transkriptionen till OpenAI
-    /*const chatResponse = await openai.chat.completions.create({
-      messages: [{ role: 'system', content: transcription }],   // BYT TILL getOpenAIResponse!!
-      model: 'gpt-4o',
-      max_tokens: 50,
-    });
 
-    const replyText = chatResponse.choices[0].message.content;  // BYT TILL getOpenAIResponse!!
-    console.log('GPT-4 Svar:', replyText); */
 
-    replyText = await promptutil.getOpenAIResponse(transcription); 
+    let replyText = await promptutil.getOpenAIResponseText(transcription); 
 
     let replyLanguageCode = 'sv-SE';
     const detectedLang = franc(transcription, { minLength: 3 });
@@ -139,18 +126,7 @@ if (transcription.trim().toLowerCase() === 'end conversation') {
         }
 
     //Process prompt with OpenAI
-  /*  const chatResponse = await openai.chat.completions.create({
-      messages: [{ role: 'system', content: transcription }],
-      model: 'gpt-4o',
-      max_tokens: 100,
-    });
-
-    const replyText = chatResponse.choices[0].message.content;
-    console.log('OpenAI Response: ', replyText);
-    */
-
-    const replyText = await getOpenAIResponse(transcription);
-
+    replyText = await promptutil.getOpenAIResponseText(transcription, );
 
     // Convert OpenAI response to audio
     const [ttsResponse] = await ttsClient.synthesizeSpeech({
@@ -410,7 +386,6 @@ app.get('/get-user-conversations/:userId?', async (req, res) => {
   let userId = req.params.userId;
 
   try {
-<<<<<<< HEAD=======
     if (!userId) {
       // No userId provided, get conversations for a guest user
       const conversations = await database.getUserConversations();
@@ -420,7 +395,6 @@ app.get('/get-user-conversations/:userId?', async (req, res) => {
       const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId)  // database.getAllConversationsForUser(userId);
       res.status(200).send({ singleUserConversations, multiUserConversations });
     }
->>>>>>> main
   } catch (error) {
     console.error('Error fetching conversations:', error);
     //res.status(500).send({ message: 'Internal server error.' });
@@ -486,7 +460,16 @@ app.get('/get-audio-files', async (req, res) => {
 
 app.get('/api/analysis', async (req, res) => {
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchAllConversations();  
+    let { singleUserConversations, multiUserConversations } = await fetchAllConversations();  
+
+    // Fallback-arrays om de är undefined eller inte arrays
+    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
+    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
+
+    // Kontrollera om båda listorna är tomma
+    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
+      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
+    }
 
     //Combine both arrays into one
     const allConversations = [
@@ -498,12 +481,11 @@ app.get('/api/analysis', async (req, res) => {
     const combinedConversations = allConversations.join(' ');
 
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
 
-    res.status(200).send(textAnalysis, wordCount);
+    res.status(200).send({textAnalysis, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
-   // res.status(500).send({ message: 'Internal server error.' });
    res.status(error.statusCode || 500).send({ message: error.message });
   }   
 });
@@ -515,6 +497,15 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 
   try {
     const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
+
+    // Fallback-arrays om de är undefined eller inte arrays
+    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
+    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
+
+    // Kontrollera om båda listorna är tomma
+    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
+      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
+    }
 
     //Combine both arrays into one
     const allConversations = [
@@ -528,7 +519,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
 
-
+    /*
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////                 <-------------------   FIXA!
     //TODO: ALTERNATIV FÖR OM MAN VILL SKICKA IN KONVERSATION FÖR KONVERSATION I STÄLLET
 
@@ -537,11 +528,11 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    */
 
-    res.status(200).send(textAnalysis, wordCount);
+    res.status(200).send({textAnalysis, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
-   // res.status(500).send({ message: 'Internal server error.' });
    res.status(error.statusCode || 500).send({ message: error.message });
   }  
 });
@@ -552,8 +543,16 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
   const userId = req.params.userId;
 
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchConversationsByIdAndRange(userId, startDate, endDate);      
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsByIdAndRange(userId, startDate, endDate);    
 
+    // Fallback-arrays om de är undefined eller inte arrays
+    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
+    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
+
+    // Kontrollera om båda listorna är tomma
+    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
+      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
+    }
     //Combine both arrays into one
     const allConversations = [
       ...singleUserConversations,
@@ -564,12 +563,11 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
     const combinedConversations = allConversations.join(' ');
 
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back                                   
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);   
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);     //Objekt med string och number
 
-    res.status(200).send(textAnalysis, wordCount);
+    res.status(200).send({textAnalysis, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
-   // res.status(500).send({ message: 'Internal server error.' });
    res.status(error.statusCode || 500).send({ message: error.message });
   }  
 });

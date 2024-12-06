@@ -1,25 +1,24 @@
 import 'dotenv/config';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); //{apiKey: process.env.OPENAI_API_KEY}
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const model = 'chatgpt-4o-latest';
 
-const instructions = "Du är en AI-lärare som hjälper människor att lära sig svenska."; //TEST - TA BORT
+let instructions = " ";  //Sätts via funktioner
 
     //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?   
     //Gör instructions dynamisk - skicka med från frontend
 
 
     //Dynamic function for prompting OpenAI - with or without instructions
-    export const getOpenAIResponse = async (prompt, instructions) => {
-        const messages = instructions
-          ? [{ role: 'system', content: instructions }, { role: 'user', content: prompt }]
-          : [{ role: 'user', content: prompt }];
+    export const getOpenAIResponseText = async (prompt) => {
+        const messages = [{ role: 'system', content: instructions }, { role: 'user', content: prompt }];
       
+        console.log(messages);
+
         const chatResponse = await openai.chat.completions.create({
           messages,
-          model,
-         // max_tokens: maxTokens,
+          model
         });
       
         return chatResponse.choices[0].message.content;
@@ -28,16 +27,13 @@ const instructions = "Du är en AI-lärare som hjälper människor att lära sig
       
       //Function for getting the word count from the text transcription
       export const getFullTextAnalysis = async (transcription) => {
-        //TODO: Kalla alla andra analys-funktioner
 
         const wordCount = getWordCountText(transcription);
-        //const vocabularyRichness = await getVocabularyRichnessText(transcription);
-        //const grammaticalErrors = await getGrammaticalErrorsText(transcription);
-        //const fillerWords = await getFillerWordsText(transcription);
 
-        //Nedan ersätter ovan och skickar en enda prompt för alla analyserna
+        //Nedan ersätter de individuella anropen och skickar en enda prompt för alla analyserna
         const instructions = "Analysera följande text för: 1. Ordförrådets rikedom: Identifiera unika ord, repetitiva mönster och den övergripande variationen i ordval. 2.Grammatiska fel: Identifiera meningar med grammatiska misstag och föreslå korrigeringar. 3.Förbättringar: Föreslå förbättringar i meningsstruktur och ordval för tydlighet och precision. 4. Fyllnadsord: Identifiera och lista fyllnadsord eller uttryck (t.ex. 'eh', 'öh', 'typ', 'du vet'), inkludera hur ofta varje ord förekommer. 4. Sammanfattning: Ge en kortfattad sammanfattning av den övergripande analysen.";
-        const textAnalysis = await getOpenAIResponseText(instructions, transcription);
+        setInstructions(instructions);
+        const textAnalysis = await getOpenAIResponseText(transcription);
 
         return { textAnalysis, wordCount };
       };
@@ -50,18 +46,29 @@ const instructions = "Du är en AI-lärare som hjälper människor att lära sig
       
       //Function for sending a prompt to OpenAI, asking for an analysis of the vocabulary richness
       export const getVocabularyRichnessText = async (transcription) => {
-        return getOpenAIResponse('Analysera följande text och identifiera bredden och variationen i ordförrådet:', transcription);
+        setInstructions("Analysera följande text och identifiera bredden och variationen i ordförrådet:");
+        return getOpenAIResponse(transcription);
       };
 
       //Function for sending a prompt to OpenAI, asking for an analysis of grammatical errors and sentence construction
       export const getGrammaticalErrorsText = async (transcription) => {
-        return getOpenAIResponse('Analysera följande text och identifiera grammatiska fel och förbättringar', transcription);
+        setInstructions("Analysera följande text och identifiera grammatiska fel och föreslå korrigeringar:");
+        return getOpenAIResponse(transcription);
       };
 
       
       //Function for sending a prompt to OpenAI, asking for an analysis of filler words
       export const getFillerWordsText = async (transcription) => {
-        return getOpenAIResponse('Analysera följande text och identifiera utfyllnadsord och slaskord som till exempel "eh" "uhm"', transcription);
+        setInstructions("Analysera följande text och identifiera utfyllnadsord och slaskord som till exempel 'eh' 'uhm':");
+        return getOpenAIResponse(transcription);
       };
 
 
+      //Setter for the instructions variable
+      export const setInstructions = (newInstructions) => {
+        if (typeof newInstructions !== 'string' || newInstructions.trim() === '') {
+          throw new Error('Instructions must be a non-empty string.');
+        }
+        instructions = newInstructions;
+      };
+      
