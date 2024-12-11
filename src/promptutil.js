@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const model = 'chatgpt-4o-latest';
 
-let instructions = "Du är en AI-lärare som hjälper människor vid språkinlärning";  //Sätts via funktion/setter
+let instructions = "Du är en AI-lärare som hjälper människor vid språkinlärning och svarar på det språk som jag skriver på, från och med nu. Ditt svar ska vara max 100 ord.";  //Sätts via funktion/setter
 
     //Använda flagga för att styra vilken typ av analys / feedback som ska fixas?   
     //Gör instructions dynamisk - skicka med från frontend
@@ -33,9 +33,8 @@ let instructions = "Du är en AI-lärare som hjälper människor vid språkinlä
 
         const wordCount = getWordCountText(transcription);
 
-        //Nedan ersätter de individuella anropen och skickar en enda prompt för alla analyserna
-        const instructions = "Analysera följande text för: 1. Ordförrådets rikedom: Identifiera unika ord, repetitiva mönster och den övergripande variationen i ordval. 2.Grammatiska fel: Identifiera meningar med grammatiska misstag och föreslå korrigeringar. 3.Förbättringar: Föreslå förbättringar i meningsstruktur och ordval för tydlighet och precision. 4. Fyllnadsord: Identifiera och lista fyllnadsord eller uttryck (t.ex. 'eh', 'öh', 'typ', 'du vet'), inkludera hur ofta varje ord förekommer. 4. Sammanfattning: Ge en kortfattad sammanfattning av den övergripande analysen. Varje del ska börjas med sin titel, i svaret, t.ex 'Sammanfattning'";
-        setInstructions(instructions);
+        //Nedan ersätter de individuella anropen och skickar en enda prompt för alla analyserna        
+        setInstructions("Analysera följande text för: 1. Ordförrådets rikedom: Identifiera unika ord, repetitiva mönster och den övergripande variationen i ordval. 2.Grammatiska fel: Identifiera meningar med grammatiska misstag och föreslå korrigeringar. 3.Förbättringar: Föreslå förbättringar i meningsstruktur och ordval för tydlighet och precision. 4. Fyllnadsord: Identifiera och lista fyllnadsord eller uttryck (t.ex. 'eh', 'öh', 'typ', 'du vet'), inkludera hur ofta varje ord förekommer. 4. Sammanfattning: Ge en kortfattad sammanfattning av den övergripande analysen. Varje del ska börjas med sin titel, i svaret, t.ex 'Sammanfattning'");
         const textAnalysis = await getOpenAIResponseText(transcription);
 
         return { textAnalysis, wordCount };

@@ -577,7 +577,7 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
 });
 
 
-// --------------------- Analysis Handling --------------------- //       Flytta till en egen fil/klass?
+// --------------------- Analysis Handling --------------------- //      
 
 //Function to fetch ALL conversations from the database. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
 const fetchAllConversations = async () => {
