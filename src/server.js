@@ -534,17 +534,6 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
 
-    /*
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////                 <-------------------   FIXA!
-    //TODO: ALTERNATIV FÖR OM MAN VILL SKICKA IN KONVERSATION FÖR KONVERSATION I STÄLLET
-
-    for (const conversation of allConversations) {
-        const textAnalysisIndividualConversation = await promptutil.getFullTextAnalysis(conversation);
-    }
-    
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    */
-
     res.status(200).send({textAnalysis, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
