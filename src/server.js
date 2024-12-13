@@ -459,46 +459,53 @@ app.get('/get-audio-files', async (req, res) => {
 // --------------------- Analysis Endpoints --------------------- //
 
 app.get('/api/analysis', async (req, res) => {
-  try {
-    let { singleUserConversations, multiUserConversations } = await fetchAllConversations();  
+  try {    
+    const allConversationsList = await fetchAllConversations(); 
+    
+    const combinedConversations = allConversationsList.reduce((acc, user) => {  //Iterate all the users and build a joined text String
+      if (!Array.isArray(user.Conversations)) {
+        console.warn("Invalid Conversations format for user:", user.UserId);
+        return acc;
+      }
+    
+      const userConversations = user.Conversations.reduce((userAcc, convo) => {       // Iterate all the conversations for a user and build a text String of all the Prompt-fields
+        if (!Array.isArray(convo.PromptsAndAnswers)) {
+          console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
+          return userAcc;
+        }
+    
+        const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {  //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
+          if (typeof pa.Prompt === 'string') {
+            promptAcc += `${pa.Prompt} `;
+          }
+          return promptAcc;
+        }, '');
+    
+        return userAcc + conversationPrompts;
+      }, '');
+    
+      return acc + userConversations;
+    }, '');
 
-    // Fallback-arrays om de är undefined eller inte arrays
-    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
-    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
-/*
-    // Kontrollera om båda listorna är tomma
-    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
-      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
-    } */
 
-    singleUserConversations.push("Katter är söt. Hästar är stor. Kor har skor.")
-    multiUserConversations.push("Hej och hå, så kan det gå. Jag slog mitt tå.");
-    multiUserConversations.push("Välkommen till vår hemsida. Jag är glad att du vill besöka.");
-    multiUserConversations.push("Hej och hå, jag vill prata med dig.");
-
-    //Combine both arrays into one
-    const allConversations = [
-      ...singleUserConversations,
-      ...multiUserConversations,
-    ];
-
-    //Combine all conversations into one string for analysis
-    const combinedConversations = allConversations.join(' ');
+    console.log("Combined Conversations:", combinedConversations);
 
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
-
-    // Dela upp textAnalysis i sektioner
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);   
+    
+        
+     //Dela upp textAnalysis i sektioner
     const sections = textAnalysis
     .replace(/\*/g, '') //Remove all asterisk characters
     .replace(/###/g, '') // Remove all ###
     .split(/(?=\d+\.)/)
     .map((section) => section.trim());
-
-
+    
+    
     console.log(sections);
+    
 
-    res.status(200).send({textAnalysis, wordCount});
+    res.status(200).send({sections, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -513,28 +520,42 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
   try {
     const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
 
-    // Fallback-arrays om de är undefined eller inte arrays
-    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
-    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
 
-    // Kontrollera om båda listorna är tomma
-    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
-      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
-    }
 
-    //Combine both arrays into one
-    const allConversations = [
-      ...singleUserConversations,
-      ...multiUserConversations,
-    ];
+    // Kombinera och extrahera alla Prompts från både singleUser och multiUser konversationer
+    const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
+      if (!Array.isArray(convo.PromptsAndAnswers)) {
+        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
+        return acc;
+      }
 
-    //Combine all conversations into one string for analysis
-    const combinedConversations = allConversations.join(' ');
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+        if (typeof pa.Prompt === 'string') {
+          promptAcc += `${pa.Prompt} `;
+        }
+        return promptAcc;
+      }, '');
+
+      return acc + conversationPrompts;
+    }, '');
+
+    
 
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
 
-    res.status(200).send({textAnalysis, wordCount});
+     //Dela upp textAnalysis i sektioner
+     const sections = textAnalysis
+     .replace(/\*/g, '') //Remove all asterisk characters
+     .replace(/###/g, '') // Remove all ###
+     .split(/(?=\d+\.)/)
+     .map((section) => section.trim());
+     
+     
+     console.log(sections);
+     
+ 
+     res.status(200).send({sections, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -545,31 +566,44 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 //GET for fetching all conversations for a specific user and range, and getting them analyzed for the history/analysis-page
 app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
   const userId = req.params.userId;
+  const { startDate, endDate } = req.query; // Antar att datumintervall skickas som query-parametrar
 
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchConversationsByIdAndRange(userId, startDate, endDate);    
+    const conversations = await fetchConversationsByIdAndRange(userId, startDate, endDate);
 
-    // Fallback-arrays om de är undefined eller inte arrays
-    singleUserConversations = Array.isArray(singleUserConversations) ? singleUserConversations : [];
-    multiUserConversations = Array.isArray(multiUserConversations) ? multiUserConversations : [];
+    // Combine and extract all Prompts from conversations in the selected date interval 
+    const combinedConversations = conversations.reduce((acc, convo) => {
+      if (!Array.isArray(convo.PromptsAndAnswers)) {
+        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
+        return acc;
+      }
 
-    // Kontrollera om båda listorna är tomma
-    if (singleUserConversations.length === 0 && multiUserConversations.length === 0) {
-      return res.status(400).send({ message: "No conversations to analyze. The lists are empty." });
-    }
-    //Combine both arrays into one
-    const allConversations = [
-      ...singleUserConversations,
-      ...multiUserConversations,
-    ];
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+        if (typeof pa.Prompt === 'string') {
+          promptAcc += `${pa.Prompt} `;
+        }
+        return promptAcc;
+      }, '');
 
-    //Combine all conversations into one string, for analysis
-    const combinedConversations = allConversations.join(' ');
+      return acc + conversationPrompts;
+    }, '');
 
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back                                   
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(conversation);     //Objekt med string och number
 
-    res.status(200).send({textAnalysis, wordCount});
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
+    
+     //Dela upp textAnalysis i sektioner
+     const sections = textAnalysis
+     .replace(/\*/g, '') //Remove all asterisk characters
+     .replace(/###/g, '') // Remove all ###
+     .split(/(?=\d+\.)/)
+     .map((section) => section.trim());
+     
+     
+     console.log(sections);
+     
+ 
+     res.status(200).send({sections, wordCount});
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
