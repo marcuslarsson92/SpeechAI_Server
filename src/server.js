@@ -494,7 +494,7 @@ app.get('/api/analysis', async (req, res) => {
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);   
     
         
-     //Dela upp textAnalysis i sektioner
+     //Split textAnalysis in sections
     const sections = textAnalysis
     .replace(/\*/g, '') //Remove all asterisk characters
     .replace(/###/g, '') // Remove all ###
@@ -522,7 +522,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 
 
 
-    // Kombinera och extrahera alla Prompts från både singleUser och multiUser konversationer
+    // Combine and extraxt all Prompts from both singleUser and multiUser conversations
     const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
       if (!Array.isArray(convo.PromptsAndAnswers)) {
         console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
@@ -544,7 +544,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
 
-     //Dela upp textAnalysis i sektioner
+     //Split textAnalysis in sections
      const sections = textAnalysis
      .replace(/\*/g, '') //Remove all asterisk characters
      .replace(/###/g, '') // Remove all ###
@@ -566,7 +566,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 //GET for fetching all conversations for a specific user and range, and getting them analyzed for the history/analysis-page
 app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
   const userId = req.params.userId;
-  const { startDate, endDate } = req.query; // Antar att datumintervall skickas som query-parametrar
+  const { startDate, endDate } = req.query; // Assumes that the date interval is sent as query-parameters
 
   try {
     const conversations = await fetchConversationsByIdAndRange(userId, startDate, endDate);
@@ -592,7 +592,7 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
     
-     //Dela upp textAnalysis i sektioner
+     //Split textAnalysis in sections
      const sections = textAnalysis
      .replace(/\*/g, '') //Remove all asterisk characters
      .replace(/###/g, '') // Remove all ###
