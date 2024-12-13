@@ -521,7 +521,6 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
     const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
 
 
-
     // Combine and extraxt all Prompts from both singleUser and multiUser conversations
     const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
       if (!Array.isArray(convo.PromptsAndAnswers)) {
@@ -529,7 +528,7 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
         return acc;
       }
 
-      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => { //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
         if (typeof pa.Prompt === 'string') {
           promptAcc += `${pa.Prompt} `;
         }
@@ -578,7 +577,7 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
         return acc;
       }
 
-      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => { //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
         if (typeof pa.Prompt === 'string') {
           promptAcc += `${pa.Prompt} `;
         }
