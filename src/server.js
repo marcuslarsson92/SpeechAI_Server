@@ -45,7 +45,6 @@ app.post('/api/prompt', async (req, res) => {
 
   });
 
-
 app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   
   let tempAudioPath = 'temp_audio.mp3';
@@ -215,7 +214,7 @@ app.post('/api/end-conversation', async (req, res) => {
 // --------------------- User Handling Endpoints --------------------- //
 
 // POST endpoint to register a new user
-app.post('/register', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -234,7 +233,7 @@ app.post('/register', async (req, res) => {
 });
 
 // POST endpoint for user login
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -253,7 +252,7 @@ app.post('/login', async (req, res) => {
 });
 
 // DELETE endpoint to delete a user by ID
-app.delete('/delete-user/:id', async (req, res) => {
+app.delete('/api/delete-user/:id', async (req, res) => {
   const userId = req.params.id;
 
   try {
@@ -270,7 +269,7 @@ app.delete('/delete-user/:id', async (req, res) => {
 });
 
 // PUT endpoint to update a user's email, password, or admin status
-app.put('/update-user/:id', async (req, res) => {
+app.put('/api/update-user/:id', async (req, res) => {
   const userId = req.params.id;
   const { email, password, admin } = req.body;
 
@@ -293,7 +292,7 @@ app.put('/update-user/:id', async (req, res) => {
 });
 
 // GET endpoint to fetch user data by ID
-app.get('/get-user/:id', async (req, res) => {
+app.get('/api/get-user/:id', async (req, res) => {
   const userId = req.params.id;
 
   try {
@@ -310,7 +309,7 @@ app.get('/get-user/:id', async (req, res) => {
 });
 
 // GET endpoint to fetch all users in the database
-app.get('/get-all-users', async (req, res) => {
+app.get('/api/get-all-users', async (req, res) => {
   try {
     const usersList = await database.getAllUsers();
     res.status(200).send(usersList);
@@ -349,24 +348,23 @@ async function processParticipants(participants) {
   return [...new Set(allUserIds)];
 }
 
-// PUT endpoint to toggle admin status   ********************************************************* Uppdatera**********************
-app.put('/toggle-admin-status', async (req, res) => {
-  const { requestingUserId, targetUserId } = req.body;
+// PUT endpoint to toggle admin status by email.
+app.put('/api/toggle-admin-status', async (req, res) => {
+  const { email } = req.body; // The client sends the user's email
 
   try {
-    const result = await database.toggleAdminStatus(requestingUserId, targetUserId);
+    const result = await database.toggleAdminStatusByEmail(email);
     res.status(200).send(result);
   } catch (error) {
     console.error('Error toggling admin status:', error);
-    if (error.message.includes('Permission denied')) {
-      res.status(403).send({ message: error.message });
-    } else if (error.message.includes('Target user not found')) {
+    if (error.message.includes('not found')) {
       res.status(404).send({ message: error.message });
     } else {
       res.status(500).send({ message: 'Internal server error.' });
     }
   }
 });
+
 
 // Endpoint to get or generate a guest ID
 app.get('/api/get-guest-id', async (req, res) => {
@@ -383,7 +381,7 @@ app.get('/api/get-guest-id', async (req, res) => {
 // --------------------- Conversation Handling Endpoints --------------------- //
 
 // GET endpoint to fetch all conversations for a specific user ******************************************************************* Update for guest
-app.get('/get-user-conversations/:userId?', async (req, res) => {
+app.get('/api/get-user-conversations/:userId?', async (req, res) => {
   let userId = req.params.userId;
   let analysisData = null;
 
@@ -408,10 +406,8 @@ app.get('/get-user-conversations/:userId?', async (req, res) => {
   }
 });
 
-
-
 // GET endpoint to fetch all conversations for all users
-app.get('/get-all-conversations', async (req, res) => {
+app.get('/api/get-all-conversations', async (req, res) => {
   try {
     const allConversationsList = await fetchAllConversations(); 
 
@@ -430,7 +426,7 @@ app.get('/get-all-conversations', async (req, res) => {
 });
 
 // POST endpoint to fetch conversations by userId and date range
-app.post('/get-conversations', async (req, res) => {
+app.post('/api/get-conversations', async (req, res) => {
   const { userId, startDate, endDate } = req.body;
 
   try {
@@ -449,12 +445,10 @@ app.post('/get-conversations', async (req, res) => {
   }
 });
 
-
-
 // --------------------- Audio Handling Endpoints --------------------- //
 
 // GET endpoint to retrieve audio files
-app.get('/get-audio-files', async (req, res) => {
+app.get('/api/get-audio-files', async (req, res) => {
   const { userId, conversationId } = req.query;
 
   try {
