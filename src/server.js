@@ -348,7 +348,7 @@ async function processParticipants(participants) {
   return [...new Set(allUserIds)];
 }
 
-// PUT endpoint to toggle admin status
+// PUT endpoint to toggle admin status   ********************************************************* Uppdatera**********************
 app.put('/toggle-admin-status', async (req, res) => {
   const { requestingUserId, targetUserId } = req.body;
 
@@ -381,7 +381,7 @@ app.get('/api/get-guest-id', async (req, res) => {
 
 // --------------------- Conversation Handling Endpoints --------------------- //
 
-// GET endpoint to fetch all conversations for a specific user *** Update for guest
+// GET endpoint to fetch all conversations for a specific user ******************************************************************* Update for guest
 app.get('/get-user-conversations/:userId?', async (req, res) => {
   let userId = req.params.userId;
 
