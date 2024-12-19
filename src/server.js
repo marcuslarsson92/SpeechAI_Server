@@ -467,31 +467,6 @@ app.get('/api/get-audio-files', async (req, res) => {
 app.get('/api/analysis', async (req, res) => {
   try {    
     const allConversationsList = await fetchAllConversations(); 
-    /*
-    const combinedConversations = allConversationsList.reduce((acc, user) => {  //Iterate all the users and build a joined text String
-      if (!Array.isArray(user.Conversations)) {
-        console.warn("Invalid Conversations format for user:", user.UserId);
-        return acc;
-      }
-    
-      const userConversations = user.Conversations.reduce((userAcc, convo) => {       // Iterate all the conversations for a user and build a text String of all the Prompt-fields
-        if (!Array.isArray(convo.PromptsAndAnswers)) {
-          console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
-          return userAcc;
-        }
-    
-        const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {  //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
-          if (typeof pa.Prompt === 'string') {
-            promptAcc += `${pa.Prompt} `;
-          }
-          return promptAcc;
-        }, '');
-    
-        return userAcc + conversationPrompts;
-      }, '');
-    
-      return acc + userConversations;
-    }, ''); */
     const combinedConversations = combineConversations(allConversationsList);
   const analysisData = await fetchAndProcessAnalysis(combinedConversations);
 
@@ -507,25 +482,7 @@ res.status(200).send(analysisData);
 app.get('/api/analysis-by-id/:userId', async (req, res) => {
   const userId = req.params.userId;
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);     
-    /*
-    const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
-      if (!Array.isArray(convo.PromptsAndAnswers)) {
-        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
-        return acc;
-      }
-
-      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => { //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
-        if (typeof pa.Prompt === 'string') {
-          promptAcc += `${pa.Prompt} `;
-        }
-        return promptAcc;
-      }, '');
-
-      return acc + conversationPrompts;
-    }, '');   */
-    
-    
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId); 
     const combinedConversations = combineConversations({singleUserConversations, multiUserConversations});
     const analysisData = await fetchAndProcessAnalysis(combinedConversations);
 
