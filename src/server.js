@@ -216,9 +216,15 @@ app.post('/api/prompt', async (req, res) => {
       }
   
       // Detect "Hi speech AI" in various forms, ignoring case and allowing multiple spaces
-      // This matches:
-      // "hi speech ai", "HiSpeechAI", "Hi speechAI", "hi   speech   ai", etc.
-      const hiSpeechAIPattern = /\bhi\s*speech\s*ai\b/i;
+      // This regex matches the following variants:
+      // "hi speech" 
+      // "hi speech a"
+      // "hi speech i"
+      // "hi speech ai"
+      // "hi speech a i"
+      // (All with flexible spacing and case)
+      
+      const hiSpeechAIPattern = /\bhi\s*speech\s*(?:ai|a\s*i|a|i)?\b/i;
       const match = transcription.match(hiSpeechAIPattern);
   
       let promptBefore = '';
