@@ -191,29 +191,34 @@ class Database {
     }
   }
 
-  // Toggle admin status for a user
-  async toggleAdminStatus(requestingUserId, targetUserId) {
-    const requestingUserRef = this.db.ref(`users/${requestingUserId}`);
-    const requestingUserSnapshot = await requestingUserRef.once('value');
-
-    if (!requestingUserSnapshot.exists() || !requestingUserSnapshot.val().Admin) {
-      throw new Error('Permission denied: Only admins can toggle admin status.');
+  // Toggle admin status for a user by email.
+  async toggleAdminStatusByEmail(email) {
+    const usersRef = this.db.ref('users');
+    const snapshot = await usersRef.orderByChild('Email').equalTo(email).once('value');
+  
+    if (!snapshot.exists()) {
+      throw new Error(`User with email ${email} not found.`);
     }
-
-    const targetUserRef = this.db.ref(`users/${targetUserId}`);
-    const targetUserSnapshot = await targetUserRef.once('value');
-
-    if (!targetUserSnapshot.exists()) {
-      throw new Error('Target user not found.');
-    }
-
-    const currentAdminStatus = targetUserSnapshot.val().Admin;
-    await targetUserRef.update({ Admin: !currentAdminStatus });
+  
+    let targetUserId;
+    let targetUserData;
+  
+    snapshot.forEach((childSnapshot) => {
+      targetUserId = childSnapshot.key;
+      targetUserData = childSnapshot.val();
+    });
+  
+    const currentAdminStatus = !!targetUserData.Admin;
+    const newAdminStatus = !currentAdminStatus;
+  
+    // Update the admin status in the database
+    await this.db.ref(`users/${targetUserId}`).update({ Admin: newAdminStatus });
+  
     return {
-      message: `Admin status toggled successfully for user ${targetUserId}.`,
-      newAdminStatus: !currentAdminStatus,
+      message: `Admin status for user ${email} has been set to ${newAdminStatus}.`
     };
   }
+  
 
   // --------------------- Conversation-Related Methods --------------------- //
 

@@ -44,7 +44,6 @@ app.post('/api/prompt', async (req, res) => {
 
   });
 
-
 app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
   
   let tempAudioPath = 'temp_audio.mp3';
@@ -73,8 +72,6 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
     console.log('speechResponse:', speechResponse);
     const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
     console.log('Transkription:', transcription);
-
-
 
     let replyText = await promptutil.getOpenAIResponseText(transcription); 
 
@@ -348,24 +345,23 @@ async function processParticipants(participants) {
   return [...new Set(allUserIds)];
 }
 
-// PUT endpoint to toggle admin status   ********************************************************* Uppdatera**********************
+// PUT endpoint to toggle admin status by email.
 app.put('/api/toggle-admin-status', async (req, res) => {
-  const { requestingUserId, targetUserId } = req.body;
+  const { email } = req.body; // The client sends the user's email
 
   try {
-    const result = await database.toggleAdminStatus(requestingUserId, targetUserId);
+    const result = await database.toggleAdminStatusByEmail(email);
     res.status(200).send(result);
   } catch (error) {
     console.error('Error toggling admin status:', error);
-    if (error.message.includes('Permission denied')) {
-      res.status(403).send({ message: error.message });
-    } else if (error.message.includes('Target user not found')) {
+    if (error.message.includes('not found')) {
       res.status(404).send({ message: error.message });
     } else {
       res.status(500).send({ message: 'Internal server error.' });
     }
   }
 });
+
 
 // Endpoint to get or generate a guest ID
 app.get('/api/get-guest-id', async (req, res) => {
@@ -402,8 +398,6 @@ app.get('/api/get-user-conversations/:userId?', async (req, res) => {
   }
 });
 
-
-
 // GET endpoint to fetch all conversations for all users
 app.get('/api/get-all-conversations', async (req, res) => {
   try {
@@ -437,8 +431,6 @@ app.post('/api/get-conversations', async (req, res) => {
     }
   }
 });
-
-
 
 // --------------------- Audio Handling Endpoints --------------------- //
 
@@ -607,7 +599,6 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
   }  
 });
 
-
 // --------------------- Analysis Handling --------------------- //      
 
 //Function to fetch ALL conversations from the database. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
@@ -656,9 +647,6 @@ const fetchConversationsByIdAndRange = async (userId, startDate, endDate) => {
     throw error;
   }
 };
-
-
-
 
 // --------------------- Start server --------------------- //
 
