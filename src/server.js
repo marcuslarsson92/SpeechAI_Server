@@ -44,139 +44,294 @@ app.post('/api/prompt', async (req, res) => {
 
   });
 
-app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
+  /**
+ * POST /api/process-audio
+ * 
+ * This endpoint processes an audio file and simulates a "speech cafe" scenario where multiple users 
+ * can have a conversation. The server listens to the conversation, saves it, and only responds when 
+ * explicitly invoked by the phrase "Hi speech AI" (with flexible spacing, casing, and supported languages).
+ * 
+ * ---------------------------
+ * INPUTS:
+ * - Multipart/form-data:
+ *    - 'audio': The audio file (MP3) containing the recorded conversation snippet or user prompt.
+ * - JSON fields (in form-data, stringified):
+ *    - 'participants': A JSON-encoded array of participant identifiers (user IDs or emails).
+ *      If no participants are provided, the user is treated as a guest.
+ * 
+ * EXAMPLE REQUEST BODY:
+ *  Form-Data:
+ *    - audio: <audio_file.mp3>
+ *    - participants: ["UserID1", "UserID2"]
+ * 
+ * ---------------------------
+ * WHAT THE ENDPOINT DOES:
+ * 1. Converts the incoming audio into text using Google Speech-to-Text. The primary language is sv-SE, 
+ *    but it tries to recognize speech in multiple languages (en-US, es-ES, de-DE, fr-FR, and others).
+ * 
+ * 2. Detects the language of the transcription using the 'franc' library and sets a suitable reply voice 
+ *    language for TTS responses.
+ * 
+ * 3. Special Cases:
+ *    - "end conversation": If the transcription is exactly "end conversation", the conversation 
+ *      is ended without saving the prompt or generating a response.
+ * 
+ *    - "Hi speech AI": If the user says "Hi speech AI" (in various spacing, casing, and 
+ *      supported languages), we treat everything before "Hi speech AI" as just recorded conversation 
+ *      with no answer, and everything after "Hi speech AI" as a prompt for OpenAI. 
+ *      The prompt before "Hi speech AI" is saved to the database (prompt only, no answer), 
+ *      and the prompt after "Hi speech AI" is sent to OpenAI for a response. Both the pre-"Hi speech AI" 
+ *      segment and the post-"Hi speech AI" prompt & answer are appended to the same ongoing conversation 
+ *      record in the database.
+ * 
+ * 4. If "Hi speech AI" is not found, the server only saves the recorded prompt with no answer. 
+ *    It does not call OpenAI and does not return an answer. The system simply "listens".
+ * 
+ * ---------------------------
+ * DATABASE INTERACTIONS:
+ * - If no participants are provided, a guest ID is generated and used.
+ * - If multiple participants are provided, it is treated as a multi-user conversation, and data 
+ *   is saved with `saveMultiUserConversation`.
+ * - If a single participant (one user ID) is provided, it's a single-user conversation using `saveConversation`.
+ * 
+ * These functions (saveConversation / saveMultiUserConversation) append 
+ * the new prompt and (optionally) answer to an ongoing conversation in the Firebase Realtime Database.
+ * 
+ * ---------------------------
+ * OUTPUTS:
+ * - On successful processing:
+ *    - If "Hi speech AI" triggered a response, the endpoint returns an audio response (MP3) generated 
+ *      by TTS for the OpenAI answer.
+ *    - If no "Hi speech AI" was found, it returns an empty audio response (just no answer audio).
+ *    - If "end conversation" was said, it returns a TTS message "Conversation ended" and ends the conversation.
+ * 
+ * Content-Type of the response is audio/mp3 or audio/mpeg.
+ * 
+ * - On error (e.g., server issues, speech recognition errors):
+ *    - Returns a 500 status code with 'Server error'.
+ * 
+ * ---------------------------
+ * SUMMARY:
+ * This endpoint acts as a central piece of the server, handling audio input, speech-to-text, 
+ * database storage, and conditional AI responses. It creates a "speech cafe" environment where 
+ * the system listens, stores conversation data, and only responds verbally and via OpenAI when 
+ * explicitly triggered by the user uttering a key phrase ("Hi speech AI").
+ */
+
+  app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
+    const participants = JSON.parse(req.body.participants || '[]'); // Mixed array of user IDs and emails
   
-  let tempAudioPath = 'temp_audio.mp3';
-  const participants = JSON.parse(req.body.participants || '[]'); // Mixed array of user IDs and emails
-
-  // Determine if it's a multi-user conversation based on the number of participants
-  const isMultiUser = participants.length > 1;
-
-  // Process participants to get user IDs
-  const allUserIds = await processParticipants(participants);
-
-
-  try {
-    // Send to Google-Speech-To-Text
-    const audioBytes = req.file.buffer.toString('base64');
-    const [speechResponse] = await speechClient.recognize({
-      audio: { content: audioBytes },
-      config: {
-        encoding: 'MP3',
-        sampleRateHertz: 48000,
-        languageCode: 'sv-SE',
-        alternativeLanguageCodes: ['en-US', 'es-ES', 'de-DE', 'fr-FR'],
-      },
-    });
-
-    console.log('speechResponse:', speechResponse);
-    const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
-    console.log('Transkription:', transcription);
-
-    let replyText = await promptutil.getOpenAIResponseText(transcription); 
-
-    let replyLanguageCode = 'sv-SE';
-    const detectedLang = franc(transcription, { minLength: 3 });
-    if (detectedLang === 'eng') {
-      replyLanguageCode = 'en-US';
-    } else if (detectedLang === 'spa') {
-      replyLanguageCode = 'es-ES';
-    } else if (detectedLang === 'deu') {
-      replyLanguageCode = 'de-DE';
-    } else if (detectedLang === 'fra') {
-      replyLanguageCode = 'fr-FR';
-    } else if (detectedLang === 'swe') {
-      replyLanguageCode = 'sv-SE';
-    } else {
-      console.warn('Language not recognized. Using default language code.');
-      replyLanguageCode = 'sv-SE';
-    }
-    console.log("detectedLang: " + detectedLang);
-    console.log("replyLanguageCode: " + replyLanguageCode);
-
-        // Handle 'end conversation' without saving the prompt and response
-if (transcription.trim().toLowerCase() === 'end conversation') {
-  const responseText = 'Conversation ended';
-  const [ttsResponse] = await ttsClient.synthesizeSpeech({
-    input: { text: responseText },
-    voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
-    audioConfig: { audioEncoding: 'MP3' },
-  });
-  const responseAudioBuffer = ttsResponse.audioContent;
-    
-          // End the conversation without saving the prompt and response
-          if (allUserIds.length === 0) {
-            const userId = await database.generateGuestId();
-            await database.endConversation(userId);
-          } else if (isMultiUser) {
-            // Multi-user conversation
-            await database.endMultiUserConversation(allUserIds);
-          } else {
-            // Single-user conversation
-            const userId = allUserIds[0];
-            await database.endConversation(userId);
-          }
-    
-          res.set('Content-Type', 'audio/mp3');
-          res.send(responseAudioBuffer);
-          return; 
+    // Determine if it's a multi-user conversation based on the number of participants
+    const isMultiUser = participants.length > 1;
+  
+    // Process participants to get user IDs
+    const allUserIds = await processParticipants(participants);
+  
+    try {
+      // Convert audio to text
+      const audioBytes = req.file.buffer.toString('base64');
+      const [speechResponse] = await speechClient.recognize({
+        audio: { content: audioBytes },
+        config: {
+          encoding: 'MP3',
+          sampleRateHertz: 48000,
+          languageCode: 'sv-SE', // primary language code
+          // Add other languages here:
+          alternativeLanguageCodes: [
+            'en-US', 'es-ES', 'de-DE', 'fr-FR', 
+            'da-DK', // Danish
+            'no-NO', // Norwegian
+            'fi-FI', // Finnish
+            'ru-RU', // Russian
+            'pt-PT', // Portuguese 
+            'pt-BR', // Portuguese (Brazil)
+            'pl-PL', // Polish
+            'hu-HU', // Hungarian
+            'cs-CZ', // Czech
+            'el-GR', // Greek
+            'it-IT', // Italian
+            'sr-RS', // Serbian (Latin)
+            'sk-SK', // Slovak
+            'zh-CN'  // Mandarin (Simplified)
+          ],
+        },
+      });
+  
+      const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n').trim();
+      console.log('Transcription:', transcription);
+  
+      // Detect language with franc
+      let replyLanguageCode = 'sv-SE';
+      const detectedLang = franc(transcription, { minLength: 3 });
+      switch (detectedLang) {
+        case 'eng':
+          replyLanguageCode = 'en-US';
+          break;
+        case 'spa':
+          replyLanguageCode = 'es-ES';
+          break;
+        case 'deu':
+          replyLanguageCode = 'de-DE';
+          break;
+        case 'fra':
+          replyLanguageCode = 'fr-FR';
+          break;
+        case 'swe':
+          replyLanguageCode = 'sv-SE';
+          break;
+        default:
+          console.warn('Language not recognized. Using default language code.');
+          replyLanguageCode = 'sv-SE';
+          break;
+      }
+  
+      console.log("detectedLang:", detectedLang);
+      console.log("replyLanguageCode:", replyLanguageCode);
+  
+      // Handle 'end conversation'
+      if (transcription.toLowerCase() === 'end conversation') {
+        const responseText = 'Conversation ended';
+        const [ttsResponse] = await ttsClient.synthesizeSpeech({
+          input: { text: responseText },
+          voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
+          audioConfig: { audioEncoding: 'MP3' },
+        });
+  
+        const responseAudioBuffer = ttsResponse.audioContent;
+        
+        // End conversation logic
+        if (allUserIds.length === 0) {
+          const userId = await database.generateGuestId();
+          await database.endConversation(userId);
+        } else if (isMultiUser) {
+          await database.endMultiUserConversation(allUserIds);
+        } else {
+          const userId = allUserIds[0];
+          await database.endConversation(userId);
         }
+  
+        res.set('Content-Type', 'audio/mp3');
+        res.send(responseAudioBuffer);
+        return;
+      }
+  
+      // Detect "Hi speech AI" in various forms, ignoring case and allowing multiple spaces
+      // This matches:
+      // "hi speech ai", "HiSpeechAI", "Hi speechAI", "hi   speech   ai", etc.
+      const hiSpeechAIPattern = /\bhi\s*speech\s*ai\b/i;
+      const match = transcription.match(hiSpeechAIPattern);
+  
+      let promptBefore = '';
+      let promptAfter = '';
+      let shouldCallOpenAI = false;
+  
+      if (match) {
+        const index = match.index;
+        promptBefore = transcription.substring(0, index).trim();
+        promptAfter = transcription.substring(index + match[0].length).trim();
+        shouldCallOpenAI = promptAfter.length > 0;
+      } else {
+        // No "Hi speech AI" phrase found
+        promptBefore = transcription;
+        promptAfter = '';
+        shouldCallOpenAI = false;
+      }
+  
+      // Prepare data for saving
+      const userIdForSingle = (allUserIds.length === 0) ? await database.generateGuestId() : (isMultiUser ? null : allUserIds[0]);
+  
+      // Save the promptBefore with no answer
+      const emptyAnswerBuffer = Buffer.from(''); 
+      const noAnswerText = '';
+  
+      if (allUserIds.length === 0) {
+        // Guest scenario
+        await database.saveConversation(
+          userIdForSingle,
+          promptBefore,
+          noAnswerText,
+          req.file.buffer,
+          emptyAnswerBuffer
+        );
+      } else if (isMultiUser) {
+        await database.saveMultiUserConversation(
+          allUserIds,
+          promptBefore,
+          noAnswerText,
+          req.file.buffer,
+          emptyAnswerBuffer
+        );
+      } else {
+        // Single-user
+        await database.saveConversation(
+          userIdForSingle,
+          promptBefore,
+          noAnswerText,
+          req.file.buffer,
+          emptyAnswerBuffer
+        );
+      }
+  
+      if (!shouldCallOpenAI) {
+        // Just listening, no "Hi speech AI" found or no prompt after it
+        res.set('Content-Type', 'audio/mpeg');
+        res.send(emptyAnswerBuffer);
+        return;
+      }
+  
+      // If we reach here, promptAfter should be sent to OpenAI
+      const replyText = await promptutil.getOpenAIResponseText(promptAfter);
+  
+      // Answer audio
+      const [ttsResponse] = await ttsClient.synthesizeSpeech({
+        input: { text: replyText },
+        voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
+        audioConfig: { audioEncoding: 'MP3' },
+      });
+  
+      const answerAudioBuffer = ttsResponse.audioContent;
+  
+      // Save the promptAfter with the OpenAI answer
+      if (allUserIds.length === 0) {
+        const userId = userIdForSingle;
+        await database.saveConversation(
+          userId,
+          promptAfter,
+          replyText,
+          req.file.buffer,
+          answerAudioBuffer
+        );
+      } else if (isMultiUser) {
+        await database.saveMultiUserConversation(
+          allUserIds,
+          promptAfter,
+          replyText,
+          req.file.buffer,
+          answerAudioBuffer
+        );
+      } else {
+        // Single-user
+        await database.saveConversation(
+          userIdForSingle,
+          promptAfter,
+          replyText,
+          req.file.buffer,
+          answerAudioBuffer
+        );
+      }
+  
+      // Send the answer audio back to the client
+      res.set('Content-Type', 'audio/mpeg');
+      res.send(answerAudioBuffer);
+  
+    } catch (error) {
+      console.error('Error processing audio:', error);
+      res.status(500).send('Server error');
+    }
+  });
+  
 
-    //Process prompt with OpenAI
-    replyText = await promptutil.getOpenAIResponseText(transcription, );
-
-    // Convert OpenAI response to audio
-    const [ttsResponse] = await ttsClient.synthesizeSpeech({
-      input: { text: replyText },
-      voice: { languageCode: replyLanguageCode,ssmlGender: 'NEUTRAL' },
-      audioConfig: { audioEncoding: 'MP3' },
-    });
-
-    const answerAudioBuffer = ttsResponse.audioContent;
-    console.log('Type of audioContent:', typeof ttsResponse.audioContent);
-
-    console.log('*********************Answer audio buffer:', answerAudioBuffer);
-
-// Handle cases where no user IDs are found (e.g., guest users)
-if (allUserIds.length === 0) {
-  const userId = await database.generateGuestId();
-  await database.saveConversation(
-    userId,
-    transcription,
-    replyText,
-    req.file.buffer,
-    answerAudioBuffer
-  );
-} else if (isMultiUser) {
-  // Multi-user conversation
-  await database.saveMultiUserConversation(
-    allUserIds,
-    transcription,
-    replyText,
-    req.file.buffer,
-    answerAudioBuffer
-  );
-} else {
-  // Single-user conversation
-  const userId = allUserIds[0];
-  await database.saveConversation(
-    userId,
-    transcription,
-    replyText,
-    req.file.buffer,
-    answerAudioBuffer
-  );
-}
-
-    res.set('Content-Type', 'audio/mpeg');
-    res.send(answerAudioBuffer);
-  } catch (error) {
-    console.error('Error processing audio:', error);
-    res.status(500).send('Server error');
-  }
-});
-
-// Endpoint to end a conversation
+  // Endpoint to end a conversation
 app.post('/api/end-conversation', async (req, res) => {
   try {
     // Extract participants from the request body
