@@ -502,10 +502,30 @@ app.get('/api/analysis', async (req, res) => {
     .map((section) => section.trim());
     
     
-    console.log(sections);
-    
+    console.log("SECTIONS:      " + sections);
 
-    res.status(200).send({sections, wordCount});
+     
+    // Remove all numbers, headers and repeting text from the beginning of section
+const cleanedSections = sections.map((section) => {
+return section
+.replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
+.trim(); // Ta bort onödiga mellanrum
+});
+
+// Bygg analysobjektet baserat på sections-arrayen
+const analysisData = {
+ vocabularyRichness: cleanedSections[0] || 'Ingen data tillgänglig.',
+ grammarMistakes: cleanedSections[1] || 'Ingen data tillgänglig.',
+ improvements: cleanedSections[2] || 'Ingen data tillgänglig.',
+ fillerWords: cleanedSections[3] || 'Ingen data tillgänglig.',
+ summary: cleanedSections[4] || 'Ingen data tillgänglig.',
+ wordCount: wordCount || 0,
+};
+
+console.log("AnalysisData: " + JSON.stringify(analysisData));
+
+
+res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -516,10 +536,8 @@ app.get('/api/analysis', async (req, res) => {
 //GET for fetching all conversations for a specific user, and getting them anlyzed for the history/analysis-page
 app.get('/api/analysis-by-id/:userId', async (req, res) => {
   const userId = req.params.userId;
-
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
-
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);    
 
     // Combine and extraxt all Prompts from both singleUser and multiUser conversations
     const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
@@ -538,8 +556,6 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
       return acc + conversationPrompts;
     }, '');
 
-    
-
     //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
     const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
 
@@ -548,13 +564,31 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
      .replace(/\*/g, '') //Remove all asterisk characters
      .replace(/###/g, '') // Remove all ###
      .split(/(?=\d+\.)/)
-     .map((section) => section.trim());
+     .map((section) => section.trim());     
      
+     console.log("SECTIONS:      " + sections);
      
-     console.log(sections);
+           // Remove all numbers, headers and repeting text from the beginning of section
+  const cleanedSections = sections.map((section) => {
+    return section
+      .replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
+      .trim(); // Ta bort onödiga mellanrum
+  });
+
+      // Bygg analysobjektet baserat på sections-arrayen
+      const analysisData = {
+        vocabularyRichness: cleanedSections[0] || 'Ingen data tillgänglig.',
+        grammarMistakes: cleanedSections[1] || 'Ingen data tillgänglig.',
+        improvements: cleanedSections[2] || 'Ingen data tillgänglig.',
+        fillerWords: cleanedSections[3] || 'Ingen data tillgänglig.',
+        summary: cleanedSections[4] || 'Ingen data tillgänglig.',
+        wordCount: wordCount || 0,
+      };
+
+      console.log("\nAnalysisData:                 " + JSON.stringify(analysisData));
      
  
-     res.status(200).send({sections, wordCount});
+     res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -595,12 +629,11 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
      const sections = textAnalysis
      .replace(/\*/g, '') //Remove all asterisk characters
      .replace(/###/g, '') // Remove all ###
-     .split(/(?=\d+\.)/)
+     .split(/(?=\d+\.)/)    // Split where the digits are
      .map((section) => section.trim());
      
      
-     console.log(sections);
-     
+     console.log("SECTIONS:      " + sections);
  
      res.status(200).send({sections, wordCount});
   } catch (error) {
