@@ -1,0 +1,25 @@
+services:
+  client:
+    image: client
+    ports:
+      - 8080:5173
+    volumes:
+      - ../Speech-AI-client/src:/app/src    
+    networks:
+      - speech-network
+    environment:
+      IS_DOCKER: true
+
+  server:
+    image: server
+    volumes:
+      - ./src:/app/src
+    ports:
+     - 3001:3001
+    env_file:
+      - .env
+
+networks:
+    speech-network:
+
+
