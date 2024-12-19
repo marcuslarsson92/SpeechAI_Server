@@ -72,7 +72,7 @@ app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
 
     console.log('speechResponse:', speechResponse);
     const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n');
-    console.log('Transkription:', transcription);
+    console.log('Transcription:', transcription);
 
 
 
@@ -392,12 +392,11 @@ app.get('/get-user-conversations/:userId?', async (req, res) => {
       res.status(200).send({ conversations });
     } else {
       // userId provided, get all conversations for the user
-      const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId)  // database.getAllConversationsForUser(userId);
+      const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId)  
       res.status(200).send({ singleUserConversations, multiUserConversations });
     }
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    //res.status(500).send({ message: 'Internal server error.' });
     res.status(error.statusCode || 500).send({ message: error.message });
   }
 });
@@ -407,14 +406,13 @@ app.get('/get-user-conversations/:userId?', async (req, res) => {
 // GET endpoint to fetch all conversations for all users
 app.get('/get-all-conversations', async (req, res) => {
   try {
-    const allConversationsList = await fetchAllConversations(); //await database.getAllConversations();
+    const allConversationsList = await fetchAllConversations(); 
     res.status(200).send(allConversationsList);
   } catch (error) {
     console.error('Error fetching all conversations:', error);
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      //res.status(500).send({ message: 'Internal server error.' });
       res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
@@ -425,14 +423,13 @@ app.post('/get-conversations', async (req, res) => {
   const { userId, startDate, endDate } = req.body;
 
   try {
-    const result = await fetchConversationsByIdAndRange(userId, startDate, endDate);   //database.getConversationsByDateRange(userId, startDate, endDate);
+    const result = await fetchConversationsByIdAndRange(userId, startDate, endDate);   
     res.status(200).send(result);
   } catch (error) {
     console.error('Error fetching conversations:', error);
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      //res.status(500).send({ message: 'Internal server error.' });
       res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
@@ -458,6 +455,7 @@ app.get('/get-audio-files', async (req, res) => {
 
 // --------------------- Analysis Endpoints --------------------- //
 
+//GET for all conversations, for all users, reutrning the analysis made on these conversations 
 app.get('/api/analysis', async (req, res) => {
   try {    
     const allConversationsList = await fetchAllConversations(); 
@@ -487,43 +485,7 @@ app.get('/api/analysis', async (req, res) => {
       return acc + userConversations;
     }, '');
 
-
-    console.log("Combined Conversations:", combinedConversations);
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);   
-    
-        
-     //Split textAnalysis in sections
-    const sections = textAnalysis
-    .replace(/\*/g, '') //Remove all asterisk characters
-    .replace(/###/g, '') // Remove all ###
-    .split(/(?=\d+\.)/)
-    .map((section) => section.trim());
-    
-    
-    console.log("SECTIONS:      " + sections);
-
-     
-    // Remove all numbers, headers and repeting text from the beginning of section
-const cleanedSections = sections.map((section) => {
-return section
-.replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
-.trim(); // Ta bort onödiga mellanrum
-});
-
-// Bygg analysobjektet baserat på sections-arrayen
-const analysisData = {
- vocabularyRichness: cleanedSections[0] || 'Ingen data tillgänglig.',
- grammarMistakes: cleanedSections[1] || 'Ingen data tillgänglig.',
- improvements: cleanedSections[2] || 'Ingen data tillgänglig.',
- fillerWords: cleanedSections[3] || 'Ingen data tillgänglig.',
- summary: cleanedSections[4] || 'Ingen data tillgänglig.',
- wordCount: wordCount || 0,
-};
-
-console.log("AnalysisData: " + JSON.stringify(analysisData));
-
+  const analysisData = fetchAnalysisAndProcess(combinedConversations);
 
 res.status(200).send(analysisData);
   } catch (error) {
@@ -555,38 +517,8 @@ app.get('/api/analysis-by-id/:userId', async (req, res) => {
 
       return acc + conversationPrompts;
     }, '');
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
-
-     //Split textAnalysis in sections
-     const sections = textAnalysis
-     .replace(/\*/g, '') //Remove all asterisk characters
-     .replace(/###/g, '') // Remove all ###
-     .split(/(?=\d+\.)/)
-     .map((section) => section.trim());     
-     
-     console.log("SECTIONS:      " + sections);
-     
-           // Remove all numbers, headers and repeting text from the beginning of section
-  const cleanedSections = sections.map((section) => {
-    return section
-      .replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
-      .trim(); // Ta bort onödiga mellanrum
-  });
-
-      // Bygg analysobjektet baserat på sections-arrayen
-      const analysisData = {
-        vocabularyRichness: cleanedSections[0] || 'Ingen data tillgänglig.',
-        grammarMistakes: cleanedSections[1] || 'Ingen data tillgänglig.',
-        improvements: cleanedSections[2] || 'Ingen data tillgänglig.',
-        fillerWords: cleanedSections[3] || 'Ingen data tillgänglig.',
-        summary: cleanedSections[4] || 'Ingen data tillgänglig.',
-        wordCount: wordCount || 0,
-      };
-
-      console.log("\nAnalysisData:                 " + JSON.stringify(analysisData));
-     
+        
+    const analysisData = fetchAnalysisAndProcess(combinedConversations);
  
      res.status(200).send(analysisData);
   } catch (error) {
@@ -621,21 +553,9 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
       return acc + conversationPrompts;
     }, '');
 
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
-    
-     //Split textAnalysis in sections
-     const sections = textAnalysis
-     .replace(/\*/g, '') //Remove all asterisk characters
-     .replace(/###/g, '') // Remove all ###
-     .split(/(?=\d+\.)/)    // Split where the digits are
-     .map((section) => section.trim());
-     
-     
-     console.log("SECTIONS:      " + sections);
+    const analysisData = fetchAnalysisAndProcess(combinedConversations);
  
-     res.status(200).send({sections, wordCount});
+     res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -643,7 +563,7 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
 });
 
 
-// --------------------- Analysis Handling --------------------- //      
+// --------------------- Fetching Conversations --------------------- //      
 
 //Function to fetch ALL conversations from the database. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
 const fetchAllConversations = async () => {
@@ -693,12 +613,49 @@ const fetchConversationsByIdAndRange = async (userId, startDate, endDate) => {
 };
 
 
+// --------------------- Analysis Handling --------------------- //   
+
+const fetchAnalysisAndProcess = async (combinedConversations) => {
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
+
+     //Split textAnalysis in sections
+     const sections = textAnalysis
+     .replace(/\*/g, '') //Remove all asterisk characters
+     .replace(/###/g, '') // Remove all ###
+     .split(/(?=\d+\.)/)
+     .map((section) => section.trim());     
+     
+     console.log("SECTIONS:      " + sections);
+     
+           // Remove all numbers, headers and repeting text from the beginning of section
+  const cleanedSections = sections.map((section) => {
+    return section
+      .replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
+      .trim(); // Ta bort onödiga mellanrum
+  });
+
+      // Build the analysis object based on the sections array
+      const analysisData = {
+        vocabularyRichness: cleanedSections[0] || 'No data available.',
+        grammarMistakes: cleanedSections[1] || 'No data available.',
+        improvements: cleanedSections[2] || 'No data available.',
+        fillerWords: cleanedSections[3] || 'No data available.',
+        summary: cleanedSections[4] || 'No data available.',
+        wordCount: wordCount || 0,
+      };
+
+      console.log("\nAnalysisData:                 " + JSON.stringify(analysisData));
+
+      return analysisData;
+}
+
 
 
 // --------------------- Start server --------------------- //
 
 app.listen(3001, () => {
-  console.log('Servern körs på port 3001');
+  console.log('The server is running on port 3001');
 });
 
 function isValidUserId(id) {
