@@ -4,14 +4,12 @@ import OpenAI from 'openai';
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const model = 'chatgpt-4o-latest';
 
-let instructions = resetInstructions(); //Set default instructions via function/setter
+let instructions = "You are an AI teacher helping people with language learning and will respond in the language that the question prompt is written in. Your response must be a maximum of 100 words.";
 
 
     //Function for prompting OpenAI
     export const getOpenAIResponseText = async (prompt) => {
         const messages = [{ role: 'system', content: instructions }, { role: 'user', content: prompt }];
-      
-       // console.log(messages);             //                   <------------------------------------------------ TEST   -- TA BORT
 
         const chatResponse = await openai.chat.completions.create({
           messages,
@@ -45,32 +43,35 @@ let instructions = resetInstructions(); //Set default instructions via function/
 
       //Function for getting the word count from the text transcription
       export const getWordCountText = (transcription) => {
+        if (typeof transcription !== 'string' || transcription === null || transcription === undefined) {
+          throw new Error('Transcription is not a String, as expected.');
+        }
         const words = transcription.split(' ');
         return words.length;
       };
       
       //Function for sending a prompt to OpenAI, asking for an analysis of the vocabulary richness
       export const getVocabularyRichnessText = async (transcription) => {
-        setInstructions("Analyze the following text and identify the breadth and variation of the vocabulary:");
+        setInstructions("Analyze the following text and identify unique words, repetitive patterns, and the overall variation in word choice. Suggest improvements in sentence structure and word choice for clarity and precision.");
         return getOpenAIResponse(transcription);
       };
 
       //Function for sending a prompt to OpenAI, asking for an analysis of grammatical errors and sentence construction
       export const getGrammaticalErrorsText = async (transcription) => {
-        setInstructions("Analyze the following text and identify grammatical errors and suggest corrections");
+        setInstructions("Analyze the following text and identify sentences with grammatical mistakes and suggest corrections. Ignore the lack of punctuation, as this is missing because the text comes from a transcription of an audio file.s");
         return getOpenAIResponse(transcription);
       };
 
       
       //Function for sending a prompt to OpenAI, asking for an analysis of filler words
       export const getFillerWordsText = async (transcription) => {
-        setInstructions("Analyze the following text and identify filler words and expressions, such as 'uh', 'um':");
+        setInstructions("Analyze the following text and identify and list filler words or expressions (e.g., 'uh', 'um', 'like', 'you know'), including how often each word occurs.':");
         return getOpenAIResponse(transcription);
       };
 
 
       export const resetInstructions = () => {
-        instructions = "You are an AI teacher helping people with language learning and will respond in the language I write in from now on. Your response must be a maximum of 100 words.";  
+        instructions = "You are an AI teacher helping people with language learning and will respond in the language that the question prompt is written in. Your response must be a maximum of 100 words.";  
       }
 
       //Setter for the instructions variable
