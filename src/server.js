@@ -14,6 +14,7 @@ import * as promptutil from './promptutil.js';
 
 const app = express();
 const multerC = multer();
+const Port = 3001;
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const ttsClient = new TextToSpeechClient();
 const speechClient = new speech.SpeechClient({keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS});
@@ -556,6 +557,7 @@ app.get('/api/get-guest-id', async (req, res) => {
 // GET endpoint to fetch all conversations for a specific user ******************************************************************* Update for guest
 app.get('/api/get-user-conversations/:userId?', async (req, res) => {
   let userId = req.params.userId;
+  let analysisData = null;
 
   try {
     if (!userId) {
@@ -564,12 +566,16 @@ app.get('/api/get-user-conversations/:userId?', async (req, res) => {
       res.status(200).send({ conversations });
     } else {
       // userId provided, get all conversations for the user
-      const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId)  // database.getAllConversationsForUser(userId);
-      res.status(200).send({ singleUserConversations, multiUserConversations });
+      const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);  
+      
+      //Process conversations and senf for analysis
+      const combinedConversations = combineConversations({ singleUserConversations, multiUserConversations });
+      const analysisData = await fetchAndProcessAnalysis(combinedConversations);
+            
+      res.status(200).send({ singleUserConversations, multiUserConversations, analysisData});
     }
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    //res.status(500).send({ message: 'Internal server error.' });
     res.status(error.statusCode || 500).send({ message: error.message });
   }
 });
@@ -577,14 +583,17 @@ app.get('/api/get-user-conversations/:userId?', async (req, res) => {
 // GET endpoint to fetch all conversations for all users
 app.get('/api/get-all-conversations', async (req, res) => {
   try {
-    const allConversationsList = await fetchAllConversations(); //await database.getAllConversations();
-    res.status(200).send(allConversationsList);
+    const allConversationsList = await fetchAllConversations(); 
+
+    const combinedConversations = combineConversations(allConversationsList);
+    const analysisData = await fetchAndProcessAnalysis(combinedConversations);
+
+    res.status(200).send({allConversationsList, analysisData});
   } catch (error) {
     console.error('Error fetching all conversations:', error);
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      //res.status(500).send({ message: 'Internal server error.' });
       res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
@@ -595,14 +604,16 @@ app.post('/api/get-conversations', async (req, res) => {
   const { userId, startDate, endDate } = req.body;
 
   try {
-    const result = await fetchConversationsByIdAndRange(userId, startDate, endDate);   //database.getConversationsByDateRange(userId, startDate, endDate);
-    res.status(200).send(result);
+    const result = await fetchConversationsByIdAndRange(userId, startDate, endDate);  
+
+    const combinedConversations = combineConversations(result);
+    const analysisData = await fetchAndProcessAnalysis(combinedConversations);
+    res.status(200).send({result, analysisData});
   } catch (error) {
     console.error('Error fetching conversations:', error);
     if (error.message.includes('No conversations found')) {
       res.status(404).send({ message: error.message });
     } else {
-      //res.status(500).send({ message: 'Internal server error.' });
       res.status(error.statusCode || 500).send({ message: error.message });
     }
   }
@@ -626,54 +637,14 @@ app.get('/api/get-audio-files', async (req, res) => {
 
 // --------------------- Analysis Endpoints --------------------- //
 
+//GET for all conversations, for all users, reutrning the analysis made on these conversations 
 app.get('/api/analysis', async (req, res) => {
   try {    
     const allConversationsList = await fetchAllConversations(); 
-    
-    const combinedConversations = allConversationsList.reduce((acc, user) => {  //Iterate all the users and build a joined text String
-      if (!Array.isArray(user.Conversations)) {
-        console.warn("Invalid Conversations format for user:", user.UserId);
-        return acc;
-      }
-    
-      const userConversations = user.Conversations.reduce((userAcc, convo) => {       // Iterate all the conversations for a user and build a text String of all the Prompt-fields
-        if (!Array.isArray(convo.PromptsAndAnswers)) {
-          console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
-          return userAcc;
-        }
-    
-        const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {  //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
-          if (typeof pa.Prompt === 'string') {
-            promptAcc += `${pa.Prompt} `;
-          }
-          return promptAcc;
-        }, '');
-    
-        return userAcc + conversationPrompts;
-      }, '');
-    
-      return acc + userConversations;
-    }, '');
+    const combinedConversations = combineConversations(allConversationsList);
+  const analysisData = await fetchAndProcessAnalysis(combinedConversations);
 
-
-    console.log("Combined Conversations:", combinedConversations);
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);   
-    
-        
-     //Split textAnalysis in sections
-    const sections = textAnalysis
-    .replace(/\*/g, '') //Remove all asterisk characters
-    .replace(/###/g, '') // Remove all ###
-    .split(/(?=\d+\.)/)
-    .map((section) => section.trim());
-    
-    
-    console.log(sections);
-    
-
-    res.status(200).send({sections, wordCount});
+res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -681,46 +652,17 @@ app.get('/api/analysis', async (req, res) => {
 });
 
 
-//GET for fetching all conversations for a specific user, and getting them anlyzed for the history/analysis-page
+//GET for fetching all conversations for a specific user, and getting them analyzed for the history/analysis-page
 app.get('/api/analysis-by-id/:userId', async (req, res) => {
   const userId = req.params.userId;
-
   try {
-    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId);      
+    const { singleUserConversations, multiUserConversations } = await fetchConversationsById(userId); 
+    const combinedConversations = combineConversations({singleUserConversations, multiUserConversations});
+    const analysisData = await fetchAndProcessAnalysis(combinedConversations);
 
-
-    // Combine and extraxt all Prompts from both singleUser and multiUser conversations
-    const combinedConversations = [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
-      if (!Array.isArray(convo.PromptsAndAnswers)) {
-        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
-        return acc;
-      }
-
-      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => { //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
-        if (typeof pa.Prompt === 'string') {
-          promptAcc += `${pa.Prompt} `;
-        }
-        return promptAcc;
-      }, '');
-
-      return acc + conversationPrompts;
-    }, '');
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
-
-     //Split textAnalysis in sections
-     const sections = textAnalysis
-     .replace(/\*/g, '') //Remove all asterisk characters
-     .replace(/###/g, '') // Remove all ###
-     .split(/(?=\d+\.)/)
-     .map((section) => section.trim());
-     
-     
-     console.log(sections);
-     
+    console.log("\nAnalysisData (i analysis-by-id):           " + JSON.stringify(analysisData));
  
-     res.status(200).send({sections, wordCount});
+     res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
@@ -735,47 +677,18 @@ app.get('/api/analysis-by-id-and-range/:userId', async (req, res) => {
 
   try {
     const conversations = await fetchConversationsByIdAndRange(userId, startDate, endDate);
-
-    // Combine and extract all Prompts from conversations in the selected date interval 
-    const combinedConversations = conversations.reduce((acc, convo) => {
-      if (!Array.isArray(convo.PromptsAndAnswers)) {
-        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
-        return acc;
-      }
-
-      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => { //Iterate all PromptsAndAnswers in conversation, pick every Prompt-field. If Prompt is a String, added it to the accumulator
-        if (typeof pa.Prompt === 'string') {
-          promptAcc += `${pa.Prompt} `;
-        }
-        return promptAcc;
-      }, '');
-
-      return acc + conversationPrompts;
-    }, '');
-
-
-    //Send for analysis, and get textAnalysis (String) and wordCount (int) back  
-    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
-    
-     //Split textAnalysis in sections
-     const sections = textAnalysis
-     .replace(/\*/g, '') //Remove all asterisk characters
-     .replace(/###/g, '') // Remove all ###
-     .split(/(?=\d+\.)/)
-     .map((section) => section.trim());
-     
-     
-     console.log(sections);
-     
+    const combinedConversations = combineConversations(conversations);
+    const analysisData = await fetchAndProcessAnalysis(combinedConversations);
  
-     res.status(200).send({sections, wordCount});
+     res.status(200).send(analysisData);
   } catch (error) {
     console.error('Error performing analysis on conversations:', error);
    res.status(error.statusCode || 500).send({ message: error.message });
   }  
 });
 
-// --------------------- Analysis Handling --------------------- //      
+
+// --------------------- Fetching Conversations --------------------- //      
 
 //Function to fetch ALL conversations from the database. Returns a list of all the conversations or the appropriate error status code (404 / 500). Throws the error to the calling function
 const fetchAllConversations = async () => {
@@ -824,10 +737,99 @@ const fetchConversationsByIdAndRange = async (userId, startDate, endDate) => {
   }
 };
 
+
+// --------------------- Analysis Handling --------------------- //   
+
+// Function to combine conversations into a single string of prompts
+const combineConversations = (conversations) => {
+  if (Array.isArray(conversations)) {
+    // If input is an array (e.g., from fetchConversationsByIdAndRange)
+    return conversations.reduce((acc, convo) => {
+      if (!Array.isArray(convo.PromptsAndAnswers)) {
+        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
+        return acc; // Skip this conversation
+      }
+
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+        if (typeof pa.Prompt === 'string') {
+          promptAcc += `${pa.Prompt} `;
+        }
+        return promptAcc;
+      }, '');
+
+      return acc + conversationPrompts;
+    }, '');
+  } else if (typeof conversations === 'object' && !Array.isArray(conversations)) {
+    // If input is an object (e.g., from fetchAllConversations or fetchConversationsById)
+    const { singleUserConversations = [], multiUserConversations = [] } = conversations;
+
+    return [...singleUserConversations, ...multiUserConversations].reduce((acc, convo) => {
+      if (!Array.isArray(convo.PromptsAndAnswers)) {
+        console.warn("Invalid PromptsAndAnswers format in conversation:", convo.ConversationId);
+        return acc; // Skip this conversation
+      }
+
+      const conversationPrompts = convo.PromptsAndAnswers.reduce((promptAcc, pa) => {
+        if (typeof pa.Prompt === 'string') {
+          promptAcc += `${pa.Prompt} `;
+        }
+        return promptAcc;
+      }, '');
+
+      return acc + conversationPrompts;
+    }, '');
+  } else {
+    console.error('Invalid conversations format. Expected an array or an object.');
+    throw new Error('Conversations must be an array or an object.');
+  }
+};
+
+
+
+//Function for 
+const fetchAndProcessAnalysis = async (combinedConversations) => {
+    //Send for analysis, and get textAnalysis (String) and wordCount (int) back               
+    const { textAnalysis, wordCount } = await promptutil.getFullTextAnalysis(combinedConversations);
+
+     //Split textAnalysis in sections
+     const sections = textAnalysis
+     .replace(/\*/g, '') //Remove all asterisk characters
+     .replace(/###/g, '') // Remove all ###
+     .split(/(?=\d+\.)/)
+     .map((section) => section.trim());     
+     
+    // console.log("SECTIONS:      " + sections);
+     
+    // Remove all numbers, headers and repeting text from the beginning of section
+  const cleanedSections = sections.map((section) => {
+    return section
+      .replace(/^\d+\.\s*/, '') // Ta bort siffror följt av punkt och mellanslag
+      .trim(); // Ta bort onödiga mellanrum
+  });
+
+      // Build the analysis object based on the sections array
+      const analysisData = {
+        vocabularyRichness: cleanedSections[0] || 'No data available.',
+        grammarMistakes: cleanedSections[1] || 'No data available.',
+        improvements: cleanedSections[2] || 'No data available.',
+        fillerWords: cleanedSections[3] || 'No data available.',
+        summary: cleanedSections[4] || 'No data available.',
+        wordCount: wordCount || 0,
+      };
+
+      //console.log("\nAnalysisData:                 " + JSON.stringify(analysisData));
+
+      return analysisData;
+}
+
+
+
+
+
 // --------------------- Start server --------------------- //
 
-app.listen(3001, () => {
-  console.log('Servern körs på port 3001');
+app.listen(Port, () => {
+  console.log(`The server is running on port ${Port}`);
 });
 
 function isValidUserId(id) {
