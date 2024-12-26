@@ -610,14 +610,6 @@ app.get('/api/get-user-conversations/:userId?', async (req, res) => {
 // GET endpoint to fetch all conversations for all users
 app.get('/api/get-all-conversations', async (req, res) => {
   try {
-<<<<<<< Updated upstream
-    const allConversationsList = await fetchAllConversations(); 
-
-    const combinedConversations = combineConversations(allConversationsList);
-    const analysisData = await fetchAndProcessAnalysis(combinedConversations);
-
-    res.status(200).send({allConversationsList, analysisData});
-=======
     const allConversationsList = await fetchAllConversations(); //await database.getAllConversations();
     const filteredConversationsList = allConversationsList.map(conversation => {
       if (!conversation.UserId) {
@@ -627,7 +619,6 @@ app.get('/api/get-all-conversations', async (req, res) => {
       return conversation;
     });
     res.status(200).send(allConversationsList);
->>>>>>> Stashed changes
   } catch (error) {
     console.error('Error fetching all conversations:', error);
     if (error.message.includes('No conversations found')) {
