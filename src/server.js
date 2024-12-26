@@ -128,7 +128,7 @@ app.post('/api/prompt', async (req, res) => {
     const allUserIds = await processParticipants(participants);
   
     try {
-      // Convert audio to text
+      // Convert audio to text (entire snippet)
       const audioBytes = req.file.buffer.toString('base64');
       const [speechResponse] = await speechClient.recognize({
         audio: { content: audioBytes },
@@ -136,70 +136,40 @@ app.post('/api/prompt', async (req, res) => {
           encoding: 'MP3',
           sampleRateHertz: 48000,
           languageCode: 'sv-SE', // primary language code
-          // Add other languages here:
+          // Additional supported languages:
           alternativeLanguageCodes: [
-            'en-US', 'es-ES', 'de-DE', 'fr-FR', 
-            'da-DK', // Danish
-            'no-NO', // Norwegian
-            'fi-FI', // Finnish
-            'ru-RU', // Russian
-            'pt-PT', // Portuguese 
-            'pt-BR', // Portuguese (Brazil)
-            'pl-PL', // Polish
-            'hu-HU', // Hungarian
-            'cs-CZ', // Czech
-            'el-GR', // Greek
-            'it-IT', // Italian
-            'sr-RS', // Serbian (Latin)
-            'sk-SK', // Slovak
-            'zh-CN'  // Mandarin (Simplified)
+            'en-US', 'es-ES', 'de-DE', 'fr-FR',
+            'da-DK', 'no-NO', 'fi-FI', 'ru-RU',
+            'pt-PT', 'pt-BR', 'pl-PL', 'hu-HU',
+            'cs-CZ', 'el-GR', 'it-IT', 'sr-RS',
+            'sk-SK', 'zh-CN', 'nl-NL', 'ro-RO',
+            'hr-HR', 'bs-BA', 'sl-SI', 'lt-LT',
+            'lv-LV', 'et-EE', 'is-IS', 'sq-AL',
+            'tr-TR', 'af-ZA'
           ],
         },
       });
   
-      const transcription = speechResponse.results.map(result => result.alternatives[0].transcript).join('\n').trim();
-      console.log('Transcription:', transcription);
+      const transcription = speechResponse.results
+        .map(result => result.alternatives[0].transcript)
+        .join('\n')
+        .trim();
   
-      // Detect language with franc
-      let replyLanguageCode = 'sv-SE';
-      const detectedLang = franc(transcription, { minLength: 3 });
-      switch (detectedLang) {
-        case 'eng':
-          replyLanguageCode = 'en-US';
-          break;
-        case 'spa':
-          replyLanguageCode = 'es-ES';
-          break;
-        case 'deu':
-          replyLanguageCode = 'de-DE';
-          break;
-        case 'fra':
-          replyLanguageCode = 'fr-FR';
-          break;
-        case 'swe':
-          replyLanguageCode = 'sv-SE';
-          break;
-        default:
-          console.warn('Language not recognized. Using default language code.');
-          replyLanguageCode = 'sv-SE';
-          break;
-      }
+      console.log('Full Transcription:', transcription);
   
-      console.log("detectedLang:", detectedLang);
-      console.log("replyLanguageCode:", replyLanguageCode);
-  
-      // Handle 'end conversation'
+      // Handle "end conversation" (same logic as before)
       if (transcription.toLowerCase() === 'end conversation') {
         const responseText = 'Conversation ended';
         const [ttsResponse] = await ttsClient.synthesizeSpeech({
           input: { text: responseText },
-          voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
+          // We'll pick a default or a best-guess language code:
+          voice: { languageCode: 'en-US', ssmlGender: 'NEUTRAL' },
           audioConfig: { audioEncoding: 'MP3' },
         });
   
         const responseAudioBuffer = ttsResponse.audioContent;
-        
-        // End conversation logic
+  
+        // End conversation in DB
         if (allUserIds.length === 0) {
           const userId = await database.generateGuestId();
           await database.endConversation(userId);
@@ -215,16 +185,13 @@ app.post('/api/prompt', async (req, res) => {
         return;
       }
   
-      // Detect "Hi speech AI" in various forms, ignoring case and allowing multiple spaces
-      // This regex matches the following variants:
-      // "hi speech" 
-      // "hi speech a"
-      // "hi speech i"
-      // "hi speech ai"
-      // "hi speech a i"
-      // (All with flexible spacing and case)
-      
-      const hiSpeechAIPattern = /\bhi\s*speech\s*(?:ai|a\s*i|a|i)?\b/i;
+      // Detect "Hi speech AI" phrase
+      // Regex matches: "hi speech", "hi speech a", "hi speech i", "hi speech ai", "hi speech a i" and much more
+      // with flexible spacing, ignoring case
+      const hiSpeechAIPattern = new RegExp(
+        String.raw`\b(?:hi|high|hai|h\s*i)\s*(?:speech|speach|spech)?\s*(?:ai|a\s*i|a|i)?\b`,
+        'i'
+      );
       const match = transcription.match(hiSpeechAIPattern);
   
       let promptBefore = '';
@@ -237,17 +204,18 @@ app.post('/api/prompt', async (req, res) => {
         promptAfter = transcription.substring(index + match[0].length).trim();
         shouldCallOpenAI = promptAfter.length > 0;
       } else {
-        // No "Hi speech AI" phrase found
+        // No "Hi speech AI" phrase found -> just record the entire snippet
         promptBefore = transcription;
         promptAfter = '';
         shouldCallOpenAI = false;
       }
   
-      // Prepare data for saving
-      const userIdForSingle = (allUserIds.length === 0) ? await database.generateGuestId() : (isMultiUser ? null : allUserIds[0]);
+      // Save the "promptBefore" portion as a conversation entry with no answer
+      const userIdForSingle = (allUserIds.length === 0)
+        ? await database.generateGuestId()
+        : (isMultiUser ? null : allUserIds[0]);
   
-      // Save the promptBefore with no answer
-      const emptyAnswerBuffer = Buffer.from(''); 
+      const emptyAnswerBuffer = Buffer.from('');
       const noAnswerText = '';
   
       if (allUserIds.length === 0) {
@@ -256,7 +224,7 @@ app.post('/api/prompt', async (req, res) => {
           userIdForSingle,
           promptBefore,
           noAnswerText,
-          req.file.buffer,
+          req.file.buffer, // storing the entire audio snippet as prompt audio
           emptyAnswerBuffer
         );
       } else if (isMultiUser) {
@@ -279,29 +247,76 @@ app.post('/api/prompt', async (req, res) => {
       }
   
       if (!shouldCallOpenAI) {
-        // Just listening, no "Hi speech AI" found or no prompt after it
+        // No "Hi speech AI" or no text after it -> no OpenAI call
         res.set('Content-Type', 'audio/mpeg');
         res.send(emptyAnswerBuffer);
         return;
       }
   
-      // If we reach here, promptAfter should be sent to OpenAI
+      // The user wants the AI to answer the text after "Hi speech AI"
+      console.log('Prompt after "Hi speech AI":', promptAfter);
+      // Re-detect language for promptAfter
+      let replyLanguageCode = 'en-US'; // default
+      const detectedLangAfter = franc(promptAfter, { minLength: 3 });
+      switch (detectedLangAfter) {
+        case 'eng': replyLanguageCode = 'en-US'; break; // English
+        case 'spa': replyLanguageCode = 'es-ES'; break; // Spanish
+        case 'deu': replyLanguageCode = 'de-DE'; break; // German
+        case 'fra': replyLanguageCode = 'fr-FR'; break; // French
+        case 'swe': replyLanguageCode = 'sv-SE'; break; // Swedish
+        case 'rus': replyLanguageCode = 'ru-RU'; break; // Russian
+        case 'por': replyLanguageCode = 'pt-PT'; break; // Portuguese
+        case 'pol': replyLanguageCode = 'pl-PL'; break; // Polish
+        case 'hun': replyLanguageCode = 'hu-HU'; break; // Hungarian
+        case 'ces':
+        case 'cze': replyLanguageCode = 'cs-CZ'; break; // Czech
+        case 'ell': replyLanguageCode = 'el-GR'; break; // Greek
+        case 'ita': replyLanguageCode = 'it-IT'; break; // Italian
+        case 'srp': replyLanguageCode = 'sr-RS'; break; // Serbian
+        case 'slk':
+        case 'slo': replyLanguageCode = 'sk-SK'; break; // Slovak
+        case 'zho': replyLanguageCode = 'zh-CN'; break; // Chinese
+        case 'fin': replyLanguageCode = 'fi-FI'; break; // Finnish
+        case 'dan': replyLanguageCode = 'da-DK'; break; // Danish
+        case 'nob':
+        case 'nor': replyLanguageCode = 'no-NO'; break; // Norwegian
+        case 'nld': replyLanguageCode = 'nl-NL'; break; // Dutch
+        case 'ron':
+        case 'rum': replyLanguageCode = 'ro-RO'; break; // Romanian
+        case 'hrv': replyLanguageCode = 'hr-HR'; break; // Croatian
+        case 'bos': replyLanguageCode = 'bs-BA'; break; // Bosnian
+        case 'slv': replyLanguageCode = 'sl-SI'; break; // Slovenian
+        case 'lit': replyLanguageCode = 'lt-LT'; break; // Lithuanian
+        case 'lav': replyLanguageCode = 'lv-LV'; break; // Latvian
+        case 'est': replyLanguageCode = 'et-EE'; break; // Estonian
+        case 'isl': replyLanguageCode = 'is-IS'; break; // Icelandic
+        case 'tur': replyLanguageCode = 'tr-TR'; break; // Turkish
+        case 'sqi':
+        case 'alb': replyLanguageCode = 'sq-AL'; break; // Albanian
+        case 'afr': replyLanguageCode = 'af-ZA'; break; // Afrikaans
+        default:
+          console.warn('Could not detect language for promptAfter. Using default (en-US).');
+          replyLanguageCode = 'en-US';
+          break;
+      }
+      console.log('Detected language for promptAfter:', detectedLangAfter, '->', replyLanguageCode);
+  
+      // Pass promptAfter to OpenAI
       const replyText = await promptutil.getOpenAIResponseText(promptAfter);
   
-      // Answer audio
+      // Synthesize TTS in the newly detected language
       const [ttsResponse] = await ttsClient.synthesizeSpeech({
         input: { text: replyText },
         voice: { languageCode: replyLanguageCode, ssmlGender: 'NEUTRAL' },
         audioConfig: { audioEncoding: 'MP3' },
       });
-  
       const answerAudioBuffer = ttsResponse.audioContent;
   
       // Save the promptAfter with the OpenAI answer
       if (allUserIds.length === 0) {
-        const userId = userIdForSingle;
+        // guest user
         await database.saveConversation(
-          userId,
+          userIdForSingle,
           promptAfter,
           replyText,
           req.file.buffer,
@@ -316,7 +331,7 @@ app.post('/api/prompt', async (req, res) => {
           answerAudioBuffer
         );
       } else {
-        // Single-user
+        // single-user
         await database.saveConversation(
           userIdForSingle,
           promptAfter,
@@ -326,7 +341,7 @@ app.post('/api/prompt', async (req, res) => {
         );
       }
   
-      // Send the answer audio back to the client
+      // Return the Open AI answer to the client
       res.set('Content-Type', 'audio/mpeg');
       res.send(answerAudioBuffer);
   
@@ -335,7 +350,7 @@ app.post('/api/prompt', async (req, res) => {
       res.status(500).send('Server error');
     }
   });
-  
+
 
   // Endpoint to end a conversation
 app.post('/api/end-conversation', async (req, res) => {
