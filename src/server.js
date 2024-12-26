@@ -469,6 +469,9 @@ app.put('/api/update-user/:id', async (req, res) => {
 app.get('/api/get-user/:id', async (req, res) => {
   const userId = req.params.id;
 
+  if (userId === 'guest') {
+    return res.status(200).send({ Email: 'Unknown user' });
+  }
   try {
     const userData = await database.getUserById(userId);
     res.status(200).send(userData);
@@ -481,6 +484,30 @@ app.get('/api/get-user/:id', async (req, res) => {
     }
   }
 });
+
+// GET endpoint to fetch user ID by email
+app.get('/api/get-user-id', async (req, res) => {
+  const { email } = req.query;
+
+  try {
+  
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const userId = await database.getUserIdByEmail(email);
+    res.status(200).json({ userId });
+  } catch (error) {
+    console.error('Error fetching user ID:', error);
+
+    if (error.message.includes('not found')) {
+      res.status(404).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: 'Internal server error.' });
+    }
+  }
+});
+
 
 // GET endpoint to fetch all users in the database
 app.get('/api/get-all-users', async (req, res) => {
@@ -583,12 +610,24 @@ app.get('/api/get-user-conversations/:userId?', async (req, res) => {
 // GET endpoint to fetch all conversations for all users
 app.get('/api/get-all-conversations', async (req, res) => {
   try {
+<<<<<<< Updated upstream
     const allConversationsList = await fetchAllConversations(); 
 
     const combinedConversations = combineConversations(allConversationsList);
     const analysisData = await fetchAndProcessAnalysis(combinedConversations);
 
     res.status(200).send({allConversationsList, analysisData});
+=======
+    const allConversationsList = await fetchAllConversations(); //await database.getAllConversations();
+    const filteredConversationsList = allConversationsList.map(conversation => {
+      if (!conversation.UserId) {
+        
+        conversation.UserId = 'guest'; 
+      }
+      return conversation;
+    });
+    res.status(200).send(allConversationsList);
+>>>>>>> Stashed changes
   } catch (error) {
     console.error('Error fetching all conversations:', error);
     if (error.message.includes('No conversations found')) {
