@@ -359,73 +359,106 @@ async endMultiUserConversation(userIds) {
 }
 
   // Get conversations for a specific user
-async getUserConversations(userId) {
-  if (!userId) {
-    userId = await this.generateGuestId();
-  }
-
-  const conversationsRef = this.db.ref(`Conversations/${userId}`);
-  const snapshot = await conversationsRef.once('value');
-
-  if (snapshot.exists()) {
+  async getUserConversations(userId) {
+    if (!userId) {
+      userId = await this.generateGuestId();
+    }
+  
+    const conversationsRef = this.db.ref(`Conversations/${userId}`);
+    const snapshot = await conversationsRef.once('value');
+  
+    if (!snapshot.exists()) {
+      throw new Error('No conversations found for this user.');
+    }
+  
     const conversationsData = snapshot.val();
-    return Object.entries(conversationsData).map(([conversationId, conversation]) => ({
-      ConversationId: conversationId,
-      PromptsAndAnswers: conversation.PromptsAndAnswers,
-      Date: conversation.Date,
-      Ended: conversation.Ended || false,
-      EndedAt: conversation.EndedAt || null,
-    }));
-  } else {
-    throw new Error('No conversations found for this user.');
-  }
-}
+  
+    return Object.entries(conversationsData).map(([conversationId, conversation]) => {
+      // Filter out empty-prompt entries
+      let filteredPrompts = [];
+      if (Array.isArray(conversation.PromptsAndAnswers)) {
+        filteredPrompts = conversation.PromptsAndAnswers.filter((pa) => {
+          return pa.Prompt && pa.Prompt.trim() !== '';
+        });
+      }
+  
+      return {
+        ConversationId: conversationId,
+        PromptsAndAnswers: filteredPrompts,
+        Date: conversation.Date,
+        Ended: conversation.Ended || false,
+        EndedAt: conversation.EndedAt || null,
+      };
+    });
+  }  
 
   // Retrives the MultiUserConversations for the specific user by ID
   async getMultiUserConversationsForUser(userId) {
     const conversationsRef = this.db.ref('MultiUserConversations');
-    const snapshot = await conversationsRef.orderByChild(`Users/${userId}`).equalTo(true).once('value');
+    const snapshot = await conversationsRef
+      .orderByChild(`Users/${userId}`)
+      .equalTo(true)
+      .once('value');
   
-    if (snapshot.exists()) {
-      const conversationsData = snapshot.val();
-      return Object.entries(conversationsData).map(([conversationId, conversation]) => ({
+    if (!snapshot.exists()) {
+      return []; // No conversations found for this user
+    }
+  
+    const conversationsData = snapshot.val();
+  
+    return Object.entries(conversationsData).map(([conversationId, conversation]) => {
+      // Filter out empty-prompt entries
+      let filteredPrompts = [];
+      if (Array.isArray(conversation.PromptsAndAnswers)) {
+        filteredPrompts = conversation.PromptsAndAnswers.filter((pa) => {
+          return pa.Prompt && pa.Prompt.trim() !== '';
+        });
+      }
+  
+      return {
         ConversationId: conversationId,
-        PromptsAndAnswers: conversation.PromptsAndAnswers,
+        PromptsAndAnswers: filteredPrompts,
         Date: conversation.Date,
         Ended: conversation.Ended || false,
         EndedAt: conversation.EndedAt || null,
         Users: Object.keys(conversation.Users),
-      }));
-    } else {
-      return []; // No conversations found for this user
-    }
-  }
+      };
+    });
+  }  
 
   // Gets all MultiUserConversations from the database
   async getAllMultiUserConversations() {
     const conversationsRef = this.db.ref('MultiUserConversations');
     const snapshot = await conversationsRef.once('value');
   
-    if (snapshot.exists()) {
-      const allConversationsData = snapshot.val();
-      const allConversationsList = [];
-  
-      Object.entries(allConversationsData).forEach(([conversationId, conversationData]) => {
-        allConversationsList.push({
-          ConversationId: conversationId,
-          PromptsAndAnswers: conversationData.PromptsAndAnswers,
-          Date: conversationData.Date,
-          Ended: conversationData.Ended || false,
-          EndedAt: conversationData.EndedAt || null,
-          Users: Object.keys(conversationData.Users),
-        });
-      });
-  
-      return allConversationsList;
-    } else {
+    if (!snapshot.exists()) {
       throw new Error('No multi-user conversations found in the database.');
     }
-  }    
+  
+    const allConversationsData = snapshot.val();
+    const allConversationsList = [];
+  
+    Object.entries(allConversationsData).forEach(([conversationId, conversationData]) => {
+      // Filter out empty-prompt entries
+      let filteredPrompts = [];
+      if (Array.isArray(conversationData.PromptsAndAnswers)) {
+        filteredPrompts = conversationData.PromptsAndAnswers.filter((pa) => {
+          return pa.Prompt && pa.Prompt.trim() !== '';
+        });
+      }
+  
+      allConversationsList.push({
+        ConversationId: conversationId,
+        PromptsAndAnswers: filteredPrompts,
+        Date: conversationData.Date,
+        Ended: conversationData.Ended || false,
+        EndedAt: conversationData.EndedAt || null,
+        Users: Object.keys(conversationData.Users),
+      });
+    });
+  
+    return allConversationsList;
+  }      
 
   //  Get all conversations for a specific user
   async getAllConversationsForUser(userId) {
@@ -443,64 +476,80 @@ async getUserConversations(userId) {
   }  
 
   // Get all conversations for all users, including multi-user conversations
-async getAllConversations() {
-  const conversationsRef = this.db.ref('Conversations');
-  const multiUserConversationsRef = this.db.ref('MultiUserConversations');
-
-  const [conversationsSnapshot, multiUserConversationsSnapshot] = await Promise.all([
-    conversationsRef.once('value'),
-    multiUserConversationsRef.once('value'),
-  ]);
-
-  let allConversationsList = [];
-
-  // Process single-user conversations
-  if (conversationsSnapshot.exists()) {
-    const allConversationsData = conversationsSnapshot.val();
-
-    Object.entries(allConversationsData).forEach(([userId, userConversations]) => {
-      let userConvoList = {
-        UserId: userId,
-        Conversations: [],
-      };
-
-      Object.entries(userConversations).forEach(([conversationId, conversation]) => {
-        userConvoList.Conversations.push({
+  async getAllConversations() {
+    const conversationsRef = this.db.ref('Conversations');
+    const multiUserConversationsRef = this.db.ref('MultiUserConversations');
+  
+    const [conversationsSnapshot, multiUserConversationsSnapshot] = await Promise.all([
+      conversationsRef.once('value'),
+      multiUserConversationsRef.once('value'),
+    ]);
+  
+    let allConversationsList = [];
+  
+    // Process single-user conversations
+    if (conversationsSnapshot.exists()) {
+      const allConversationsData = conversationsSnapshot.val();
+  
+      Object.entries(allConversationsData).forEach(([userId, userConversations]) => {
+        let userConvoList = {
+          UserId: userId,
+          Conversations: [],
+        };
+  
+        Object.entries(userConversations).forEach(([conversationId, conversation]) => {
+          // Filter out empty-prompt entries
+          let filteredPrompts = [];
+          if (Array.isArray(conversation.PromptsAndAnswers)) {
+            filteredPrompts = conversation.PromptsAndAnswers.filter((pa) => {
+              return pa.Prompt && pa.Prompt.trim() !== '';
+            });
+          }
+  
+          userConvoList.Conversations.push({
+            ConversationId: conversationId,
+            PromptsAndAnswers: filteredPrompts,
+            Date: conversation.Date,
+            Ended: conversation.Ended || false,
+            EndedAt: conversation.EndedAt || null,
+          });
+        });
+  
+        allConversationsList.push(userConvoList);
+      });
+    }
+  
+    // Process multi-user conversations
+    if (multiUserConversationsSnapshot.exists()) {
+      const multiUserConversationsData = multiUserConversationsSnapshot.val();
+  
+      // Since multi-user conversations are not tied to a single user, we'll collect them separately
+      Object.entries(multiUserConversationsData).forEach(([conversationId, conversationData]) => {
+        // Filter out empty-prompt entries
+        let filteredPrompts = [];
+        if (Array.isArray(conversationData.PromptsAndAnswers)) {
+          filteredPrompts = conversationData.PromptsAndAnswers.filter((pa) => {
+            return pa.Prompt && pa.Prompt.trim() !== '';
+          });
+        }
+  
+        allConversationsList.push({
           ConversationId: conversationId,
-          PromptsAndAnswers: conversation.PromptsAndAnswers,
-          Date: conversation.Date,
-          Ended: conversation.Ended || false,
-          EndedAt: conversation.EndedAt || null,
+          PromptsAndAnswers: filteredPrompts,
+          Date: conversationData.Date,
+          Ended: conversationData.Ended || false,
+          EndedAt: conversationData.EndedAt || null,
+          Users: Object.keys(conversationData.Users),
         });
       });
-
-      allConversationsList.push(userConvoList);
-    });
-  }
-
-  // Process multi-user conversations
-  if (multiUserConversationsSnapshot.exists()) {
-    const multiUserConversationsData = multiUserConversationsSnapshot.val();
-
-    // Since multi-user conversations are not tied to a single user, we'll collect them separately
-    Object.entries(multiUserConversationsData).forEach(([conversationId, conversationData]) => {
-      allConversationsList.push({
-        ConversationId: conversationId,
-        PromptsAndAnswers: conversationData.PromptsAndAnswers,
-        Date: conversationData.Date,
-        Ended: conversationData.Ended || false,
-        EndedAt: conversationData.EndedAt || null,
-        Users: Object.keys(conversationData.Users),
-      });
-    });
-  }
-
-  if (allConversationsList.length > 0) {
-    return allConversationsList;
-  } else {
-    throw new Error('No conversations found in the database.');
-  }
-}
+    }
+  
+    if (allConversationsList.length > 0) {
+      return allConversationsList;
+    } else {
+      throw new Error('No conversations found in the database.');
+    }
+  }  
 
   // Get conversations by date range
   async getConversationsByDateRange(userId, startDate, endDate) {
@@ -526,6 +575,7 @@ async getAllConversations() {
     if (singleUserSnapshot.exists()) {
       const allConversationsData = singleUserSnapshot.val();
   
+      // If userId is set, we only look at that user’s conversations. If not, we look at all.
       const usersData = userId ? { [userId]: allConversationsData } : allConversationsData;
   
       Object.entries(usersData).forEach(([currentUserId, userConversations]) => {
@@ -533,10 +583,18 @@ async getAllConversations() {
           const conversationDate = new Date(conversation.Date);
   
           if (conversationDate >= start && conversationDate <= end) {
+            // Filter out empty-prompt entries
+            let filteredPrompts = [];
+            if (Array.isArray(conversation.PromptsAndAnswers)) {
+              filteredPrompts = conversation.PromptsAndAnswers.filter((pa) => {
+                return pa.Prompt && pa.Prompt.trim() !== '';
+              });
+            }
+  
             result.push({
               ConversationId: conversationId,
               Users: [currentUserId],
-              PromptsAndAnswers: conversation.PromptsAndAnswers,
+              PromptsAndAnswers: filteredPrompts,
               Date: conversation.Date,
               Ended: conversation.Ended || false,
               EndedAt: conversation.EndedAt || null,
@@ -556,10 +614,18 @@ async getAllConversations() {
         if (conversationDate >= start && conversationDate <= end) {
           // If userId is provided, check if user is part of the conversation
           if (!userId || (conversation.Users && conversation.Users[userId])) {
+            // Filter out empty-prompt entries
+            let filteredPrompts = [];
+            if (Array.isArray(conversation.PromptsAndAnswers)) {
+              filteredPrompts = conversation.PromptsAndAnswers.filter((pa) => {
+                return pa.Prompt && pa.Prompt.trim() !== '';
+              });
+            }
+  
             result.push({
               ConversationId: conversationId,
               Users: Object.keys(conversation.Users || {}),
-              PromptsAndAnswers: conversation.PromptsAndAnswers,
+              PromptsAndAnswers: filteredPrompts,
               Date: conversation.Date,
               Ended: conversation.Ended || false,
               EndedAt: conversation.EndedAt || null,
@@ -574,10 +640,10 @@ async getAllConversations() {
     } else {
       throw new Error('No conversations found within the specified date range.');
     }
-  }
+  }  
   
 
-    // Finction to save MultiUserConversations
+    // Function to save MultiUserConversations
    async saveMultiUserConversation(userIds, prompt, answer, promptAudioBuffer, answerAudioBuffer) {
     if (!userIds || userIds.length === 0) {
       console.warn('No user IDs provided to save the conversation.');

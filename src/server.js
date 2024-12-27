@@ -45,7 +45,7 @@ app.post('/api/prompt', async (req, res) => {
 
   });
 
-  /**
+/**
  * POST /api/process-audio
  * 
  * This endpoint processes an audio file and simulates a "speech cafe" scenario where multiple users 
@@ -56,7 +56,7 @@ app.post('/api/prompt', async (req, res) => {
  * INPUTS:
  * - Multipart/form-data:
  *    - 'audio': The audio file (MP3) containing the recorded conversation snippet or user prompt.
- * - JSON fields (in form-data, stringified):
+ * - JSON fields (in-form-data, stringified):
  *    - 'participants': A JSON-encoded array of participant identifiers (user IDs or emails).
  *      If no participants are provided, the user is treated as a guest.
  * 
@@ -76,17 +76,18 @@ app.post('/api/prompt', async (req, res) => {
  * 3. Special Cases:
  *    - "end conversation": If the transcription is exactly "end conversation", the conversation 
  *      is ended without saving the prompt or generating a response.
- * 
  *    - "Hi speech AI": If the user says "Hi speech AI" (in various spacing, casing, and 
  *      supported languages), we treat everything before "Hi speech AI" as just recorded conversation 
- *      with no answer, and everything after "Hi speech AI" as a prompt for OpenAI. 
- *      The prompt before "Hi speech AI" is saved to the database (prompt only, no answer), 
- *      and the prompt after "Hi speech AI" is sent to OpenAI for a response. Both the pre-"Hi speech AI" 
- *      segment and the post-"Hi speech AI" prompt & answer are appended to the same ongoing conversation 
- *      record in the database.
+ *      with no answer, and everything after "Hi speech AI" is sent to OpenAI for a response. Both 
+ *      segments are appended to the same ongoing conversation record in the database, but only if 
+ *      those segments are non-empty.
+ *    - Additionally, if the entire snippet or either part of the split prompt is empty, 
+ *      that empty prompt is ignored and not saved or sent to OpenAI. In such cases, 
+ *      the endpoint returns no answer audio.
  * 
  * 4. If "Hi speech AI" is not found, the server only saves the recorded prompt with no answer. 
- *    It does not call OpenAI and does not return an answer. The system simply "listens".
+ *    It does not call OpenAI and does not return an answer. The system simply "listens". 
+ *    If that prompt is empty, it is similarly discarded.
  * 
  * ---------------------------
  * DATABASE INTERACTIONS:
@@ -96,7 +97,8 @@ app.post('/api/prompt', async (req, res) => {
  * - If a single participant (one user ID) is provided, it's a single-user conversation using `saveConversation`.
  * 
  * These functions (saveConversation / saveMultiUserConversation) append 
- * the new prompt and (optionally) answer to an ongoing conversation in the Firebase Realtime Database.
+ * the new prompt and (optionally) answer to an ongoing conversation in the Firebase Realtime Database, 
+ * but empty prompts are never saved.
  * 
  * ---------------------------
  * OUTPUTS:
@@ -105,6 +107,8 @@ app.post('/api/prompt', async (req, res) => {
  *      by TTS for the OpenAI answer.
  *    - If no "Hi speech AI" was found, it returns an empty audio response (just no answer audio).
  *    - If "end conversation" was said, it returns a TTS message "Conversation ended" and ends the conversation.
+ *    - If the prompt (or any segment of it) is empty, no data is saved, and the endpoint returns 
+ *      an empty audio buffer.
  * 
  * Content-Type of the response is audio/mp3 or audio/mpeg.
  * 
@@ -116,7 +120,8 @@ app.post('/api/prompt', async (req, res) => {
  * This endpoint acts as a central piece of the server, handling audio input, speech-to-text, 
  * database storage, and conditional AI responses. It creates a "speech cafe" environment where 
  * the system listens, stores conversation data, and only responds verbally and via OpenAI when 
- * explicitly triggered by the user uttering a key phrase ("Hi speech AI").
+ * explicitly triggered by the user uttering a key phrase ("Hi speech AI"). Empty prompts are 
+ * discarded so as not to clutter the database or invoke AI calls needlessly.
  */
 
   app.post('/api/process-audio', multerC.single('audio'), async (req, res) => {
@@ -137,7 +142,6 @@ app.post('/api/prompt', async (req, res) => {
           encoding: 'MP3',
           sampleRateHertz: 48000,
           languageCode: 'sv-SE', // primary language code
-          // Additional supported languages:
           alternativeLanguageCodes: [
             'en-US', 'es-ES', 'de-DE', 'fr-FR',
             'da-DK', 'no-NO', 'fi-FI', 'ru-RU',
@@ -151,19 +155,26 @@ app.post('/api/prompt', async (req, res) => {
         },
       });
   
-      const transcription = speechResponse.results
-        .map(result => result.alternatives[0].transcript)
+      let transcription = speechResponse.results
+        .map((result) => result.alternatives[0].transcript)
         .join('\n')
         .trim();
   
       console.log('Full Transcription:', transcription);
   
-      // Handle "end conversation" (same logic as before)
+      // If the transcription is completely empty, do nothing and return an empty buffer
+      if (!transcription) {
+        console.log('No transcription found. Disregarding empty prompt...');
+        res.set('Content-Type', 'audio/mpeg');
+        return res.send(Buffer.from([])); // Return silent/empty audio
+      }
+  
+      // Handle "end conversation" if transcription exactly matches
       if (transcription.toLowerCase() === 'end conversation') {
         const responseText = 'Conversation ended';
         const [ttsResponse] = await ttsClient.synthesizeSpeech({
           input: { text: responseText },
-          // We'll pick a default or a best-guess language code:
+          // Using English as default or any chosen language for the TTS
           voice: { languageCode: 'en-US', ssmlGender: 'NEUTRAL' },
           audioConfig: { audioEncoding: 'MP3' },
         });
@@ -186,9 +197,7 @@ app.post('/api/prompt', async (req, res) => {
         return;
       }
   
-      // Detect "Hi speech AI" phrase
-      // Regex matches: "hi speech", "hi speech a", "hi speech i", "hi speech ai", "hi speech a i" and much more
-      // with flexible spacing, ignoring case
+      // Detect "Hi speech AI" phrase with flexible pattern
       const hiSpeechAIPattern = new RegExp(
         String.raw`\b(?:hi|high|hai|h\s*i)\s*(?:speech|speach|spech)?\s*(?:ai|a\s*i|a|i)?\b`,
         'i'
@@ -205,103 +214,88 @@ app.post('/api/prompt', async (req, res) => {
         promptAfter = transcription.substring(index + match[0].length).trim();
         shouldCallOpenAI = promptAfter.length > 0;
       } else {
-        // No "Hi speech AI" phrase found -> just record the entire snippet
+        // No "Hi speech AI" phrase found -> entire snippet is "promptBefore"
         promptBefore = transcription;
         promptAfter = '';
         shouldCallOpenAI = false;
       }
+
+      // Detect the language for promptBefore to use as fallback
+      // if promptBefore is empty, fallback defaults to en-US.
+    fallbackLanguageCode = 'en-US';
+    if (promptBefore) {
+      const detectedLangBefore = franc(promptBefore, { minLength: 5 });
+      console.log('Detected language for promptBefore:', detectedLangBefore);
+
+      fallbackLanguageCode = mapFrancToTTS(detectedLangBefore) || 'en-US';
+      console.log('=> fallbackLanguageCode for promptBefore:', fallbackLanguageCode);
+    }
   
-      // Save the "promptBefore" portion as a conversation entry with no answer
-      const userIdForSingle = (allUserIds.length === 0)
+      // If promptBefore is empty, skip saving it.
+      // Otherwise, save it as a conversation entry with no answer.
+      const userIdForSingle = allUserIds.length === 0
         ? await database.generateGuestId()
         : (isMultiUser ? null : allUserIds[0]);
   
       const emptyAnswerBuffer = Buffer.from('');
       const noAnswerText = '';
   
-      if (allUserIds.length === 0) {
-        // Guest scenario
-        await database.saveConversation(
-          userIdForSingle,
-          promptBefore,
-          noAnswerText,
-          req.file.buffer, // storing the entire audio snippet as prompt audio
-          emptyAnswerBuffer
-        );
-      } else if (isMultiUser) {
-        await database.saveMultiUserConversation(
-          allUserIds,
-          promptBefore,
-          noAnswerText,
-          req.file.buffer,
-          emptyAnswerBuffer
-        );
+      if (promptBefore) {
+        // Only save if promptBefore is non-empty
+        if (allUserIds.length === 0) {
+          // Guest scenario
+          await database.saveConversation(
+            userIdForSingle,
+            promptBefore,
+            noAnswerText,
+            req.file.buffer, // storing entire audio snippet as prompt audio
+            emptyAnswerBuffer
+          );
+        } else if (isMultiUser) {
+          await database.saveMultiUserConversation(
+            allUserIds,
+            promptBefore,
+            noAnswerText,
+            req.file.buffer,
+            emptyAnswerBuffer
+          );
+        } else {
+          // Single-user
+          await database.saveConversation(
+            userIdForSingle,
+            promptBefore,
+            noAnswerText,
+            req.file.buffer,
+            emptyAnswerBuffer
+          );
+        }
       } else {
-        // Single-user
-        await database.saveConversation(
-          userIdForSingle,
-          promptBefore,
-          noAnswerText,
-          req.file.buffer,
-          emptyAnswerBuffer
-        );
+        console.log('promptBefore is empty — skipping database save');
       }
   
+      // If there's no text after "Hi speech AI" or user didn't say "Hi speech AI",
+      // we skip the OpenAI call and return an empty buffer.
       if (!shouldCallOpenAI) {
-        // No "Hi speech AI" or no text after it -> no OpenAI call
+        console.log('No AI call triggered, returning empty audio...');
         res.set('Content-Type', 'audio/mpeg');
-        res.send(emptyAnswerBuffer);
-        return;
+        return res.send(emptyAnswerBuffer);
       }
   
-      // The user wants the AI to answer the text after "Hi speech AI"
-      console.log('Prompt after "Hi speech AI":', promptAfter);
+      // If promptAfter is empty, skip saving or responding
+      if (!promptAfter) {
+        console.log('promptAfter is empty — skipping DB save & OpenAI call...');
+        res.set('Content-Type', 'audio/mpeg');
+        return res.send(emptyAnswerBuffer);
+      }
+  
       // Re-detect language for promptAfter
-      let replyLanguageCode = 'en-US'; // default
-      const detectedLangAfter = franc(promptAfter, { minLength: 3 });
-      switch (detectedLangAfter) {
-        case 'eng': replyLanguageCode = 'en-US'; break; // English
-        case 'spa': replyLanguageCode = 'es-ES'; break; // Spanish
-        case 'deu': replyLanguageCode = 'de-DE'; break; // German
-        case 'fra': replyLanguageCode = 'fr-FR'; break; // French
-        case 'swe': replyLanguageCode = 'sv-SE'; break; // Swedish
-        case 'rus': replyLanguageCode = 'ru-RU'; break; // Russian
-        case 'por': replyLanguageCode = 'pt-PT'; break; // Portuguese
-        case 'pol': replyLanguageCode = 'pl-PL'; break; // Polish
-        case 'hun': replyLanguageCode = 'hu-HU'; break; // Hungarian
-        case 'ces':
-        case 'cze': replyLanguageCode = 'cs-CZ'; break; // Czech
-        case 'ell': replyLanguageCode = 'el-GR'; break; // Greek
-        case 'ita': replyLanguageCode = 'it-IT'; break; // Italian
-        case 'srp': replyLanguageCode = 'sr-RS'; break; // Serbian
-        case 'slk':
-        case 'slo': replyLanguageCode = 'sk-SK'; break; // Slovak
-        case 'zho': replyLanguageCode = 'zh-CN'; break; // Chinese
-        case 'fin': replyLanguageCode = 'fi-FI'; break; // Finnish
-        case 'dan': replyLanguageCode = 'da-DK'; break; // Danish
-        case 'nob':
-        case 'nor': replyLanguageCode = 'no-NO'; break; // Norwegian
-        case 'nld': replyLanguageCode = 'nl-NL'; break; // Dutch
-        case 'ron':
-        case 'rum': replyLanguageCode = 'ro-RO'; break; // Romanian
-        case 'hrv': replyLanguageCode = 'hr-HR'; break; // Croatian
-        case 'bos': replyLanguageCode = 'bs-BA'; break; // Bosnian
-        case 'slv': replyLanguageCode = 'sl-SI'; break; // Slovenian
-        case 'lit': replyLanguageCode = 'lt-LT'; break; // Lithuanian
-        case 'lav': replyLanguageCode = 'lv-LV'; break; // Latvian
-        case 'est': replyLanguageCode = 'et-EE'; break; // Estonian
-        case 'isl': replyLanguageCode = 'is-IS'; break; // Icelandic
-        case 'tur': replyLanguageCode = 'tr-TR'; break; // Turkish
-        case 'sqi':
-        case 'alb': replyLanguageCode = 'sq-AL'; break; // Albanian
-        case 'afr': replyLanguageCode = 'af-ZA'; break; // Afrikaans
-        default:
-          console.warn('Could not detect language for promptAfter. Using default (en-US).');
-          replyLanguageCode = 'en-US';
-          break;
-      }
-      console.log('Detected language for promptAfter:', detectedLangAfter, '->', replyLanguageCode);
-  
+      const detectedLangAfter = franc(promptAfter, { minLength: 5 });
+      console.log('Detected language for promptAfter:', detectedLangAfter);
+
+      // Try to map the promptAfter language, else fallback
+      let replyLanguageCode = mapFrancToTTS(detectedLangAfter) || fallbackLanguageCode;
+      console.log('-> Final chosen language code:', replyLanguageCode);
+
       // Pass promptAfter to OpenAI
       const replyText = await promptutil.getOpenAIResponseText(promptAfter);
   
@@ -313,9 +307,9 @@ app.post('/api/prompt', async (req, res) => {
       });
       const answerAudioBuffer = ttsResponse.audioContent;
   
-      // Save the promptAfter with the OpenAI answer
+      // Save the promptAfter + answer
       if (allUserIds.length === 0) {
-        // guest user
+        // Guest user
         await database.saveConversation(
           userIdForSingle,
           promptAfter,
@@ -332,7 +326,7 @@ app.post('/api/prompt', async (req, res) => {
           answerAudioBuffer
         );
       } else {
-        // single-user
+        // Single-user
         await database.saveConversation(
           userIdForSingle,
           promptAfter,
@@ -342,7 +336,7 @@ app.post('/api/prompt', async (req, res) => {
         );
       }
   
-      // Return the Open AI answer to the client
+      // Return the TTS answer to the client
       res.set('Content-Type', 'audio/mpeg');
       res.send(answerAudioBuffer);
   
@@ -351,7 +345,48 @@ app.post('/api/prompt', async (req, res) => {
       res.status(500).send('Server error');
     }
   });
-
+  
+  function mapFrancToTTS(code) {
+    switch (code) {
+      case 'eng': return 'en-US'; 
+      case 'spa': return 'es-ES';
+      case 'deu': return 'de-DE';
+      case 'fra': return 'fr-FR';
+      case 'swe': return 'sv-SE';
+      case 'rus': return 'ru-RU';
+      case 'por': return 'pt-PT';
+      case 'pol': return 'pl-PL';
+      case 'hun': return 'hu-HU';
+      case 'ces':
+      case 'cze': return 'cs-CZ'; 
+      case 'ell': return 'el-GR';
+      case 'ita': return 'it-IT';
+      case 'srp': return 'sr-RS';
+      case 'slk':
+      case 'slo': return 'sk-SK';
+      case 'zho': return 'zh-CN';
+      case 'fin': return 'fi-FI';
+      case 'dan': return 'da-DK';
+      case 'nob':
+      case 'nor': return 'no-NO';
+      case 'nld': return 'nl-NL';
+      case 'ron':
+      case 'rum': return 'ro-RO';
+      case 'hrv': return 'hr-HR';
+      case 'bos': return 'bs-BA';
+      case 'slv': return 'sl-SI';
+      case 'lit': return 'lt-LT';
+      case 'lav': return 'lv-LV';
+      case 'est': return 'et-EE';
+      case 'isl': return 'is-IS';
+      case 'tur': return 'tr-TR';
+      case 'sqi':
+      case 'alb': return 'sq-AL';
+      case 'afr': return 'af-ZA';
+      default:
+        return null;  // return null so we know to fallback
+    }
+  }  
 
   // Endpoint to end a conversation
 app.post('/api/end-conversation', async (req, res) => {
