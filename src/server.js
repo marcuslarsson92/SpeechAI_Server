@@ -508,7 +508,6 @@ app.get('/api/get-user-id', async (req, res) => {
   }
 });
 
-
 // GET endpoint to fetch all users in the database
 app.get('/api/get-all-users', async (req, res) => {
   try {
