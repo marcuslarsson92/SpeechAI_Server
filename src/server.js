@@ -615,7 +615,7 @@ app.get('/api/get-guest-id', async (req, res) => {
 
 // --------------------- Conversation Handling Endpoints --------------------- //
 
-// GET endpoint to fetch all conversations for a specific user ******************************************************************* Update for guest
+// GET endpoint to fetch all conversations for a specific user
 app.get('/api/get-user-conversations/:userId?', async (req, res) => {
   let userId = req.params.userId;
   let analysisData = null;
