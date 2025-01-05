@@ -254,6 +254,10 @@ class Database {
     conversationData = ongoingConversationSnapshot.val()[conversationKey];
     conversationId = conversationKey;
 
+    if (!Array.isArray(conversationData.PromptsAndAnswers)) {
+      conversationData.PromptsAndAnswers = [];
+    }
+    
     conversationData.PromptsAndAnswers.push({
       Prompt: prompt,
       Answer: answer,
