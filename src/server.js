@@ -221,7 +221,7 @@ app.post('/api/prompt', async (req, res) => {
       }
 
       // Detect the language for promptBefore to use as fallback
-      // if promptBefore is empty, fallback defaults to en-US.
+      // if promptBefore is empty, fallback defaults to sv-SE.
       let fallbackLanguageCode = 'sv-SE';
     if (promptBefore) {
       const detectedLangBefore = franc(promptBefore, { minLength: 5 });
