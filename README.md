@@ -16,7 +16,7 @@ You also need two Google credential JSON files:
 GOOGLE_APPLICATION_CREDENTIALS: Service Account key for Google’s Speech and TTS APIs.
 FIREBASE_KEY: Service Account key for Firebase Admin SDK.
 
-Dependencys to install:
+Dependencies to install:
 npm install firebase-admin
 npm install -g nodemon
 npm install
