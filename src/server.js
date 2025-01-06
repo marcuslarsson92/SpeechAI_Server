@@ -199,7 +199,7 @@ app.post('/api/prompt', async (req, res) => {
   
       // Detect "Hi speech AI" phrase with flexible pattern
       const hiSpeechAIPattern = new RegExp(
-        String.raw`\b(?:hi|high|hai|h\s*i)\s*(?:speech|speach|spech)?\s*(?:ai|a\s*i|a|i)?\b`,
+        String.raw`\b(?:hi|high|hai|hei|haj|hay|haij|h\s*i)\s*(?:speech|speach|spech)?\s*(?:ai|a\s*i|a|i)?\b`,
         'i'
       );
       const match = transcription.match(hiSpeechAIPattern);
