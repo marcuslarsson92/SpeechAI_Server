@@ -4,7 +4,17 @@ import OpenAI from 'openai';
 const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY}); 
 const model = 'chatgpt-4o-latest';
 
-let instructions = "You are an AI teacher helping people with language learning and will respond in the language that the question prompt is written in. Your response must be a maximum of 100 words.";
+let instructions = `
+You are an AI teacher helping people with language learning. 
+You will respond in the language that the user prompt is written in, 
+using at most 100 words. 
+On the *first line* of your response, write:
+LanguageCode: <LANG_CODE>
+
+Where <LANG_CODE> is the language code (e.g., en-US, sv-SE) that you think best matches the user prompt. 
+Then, on subsequent lines, provide your answer in that language.
+`;
+
 
 
     //Function for prompting OpenAI
@@ -19,8 +29,29 @@ let instructions = "You are an AI teacher helping people with language learning 
         //Reset the instruction-prompt
         resetInstructions();
       
+        
         return chatResponse.choices[0].message.content;
       };
+      export const parseChatGPTResponse = (fullReplyText) => {
+        // Splitta upp i rader
+        const lines = fullReplyText.split('\n');
+      
+        // Default/fallback
+        let languageCode = null;
+        let message = fullReplyText;
+      
+        if (lines.length > 0) {
+          const firstLine = lines[0].trim();
+          if (firstLine.startsWith('LanguageCode:')) {
+            languageCode = firstLine.replace('LanguageCode:', '').trim();
+            // Resten av raderna är själva svaret
+            message = lines.slice(1).join('\n').trim();
+          }
+        }
+      
+        return { languageCode, message };
+      };
+      
 
       
       //Function for getting the word count from the text transcription
@@ -71,7 +102,16 @@ let instructions = "You are an AI teacher helping people with language learning 
 
 
       export const resetInstructions = () => {
-        instructions = "You are an AI teacher helping people with language learning and will respond in the language that the question prompt is written in. Your response must be a maximum of 100 words.";  
+        instructions = `
+You are an AI teacher helping people with language learning. 
+You will respond in the language that the user prompt is written in, 
+using at most 100 words. 
+On the *first line* of your response, write:
+LanguageCode: <LANG_CODE>
+
+Where <LANG_CODE> is the language code (e.g., en-US, sv-SE) that you think best matches the user prompt. 
+Then, on subsequent lines, provide your answer in that language.
+`;
       }
 
       //Setter for the instructions variable
