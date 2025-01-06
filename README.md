@@ -16,7 +16,7 @@ You also need two Google credential JSON files:
 GOOGLE_APPLICATION_CREDENTIALS: Service Account key for Google’s Speech and TTS APIs.
 FIREBASE_KEY: Service Account key for Firebase Admin SDK.
 
-Dependencys to install:
+Dependencies to install:
 npm install firebase-admin
 npm install -g nodemon
 npm install
@@ -35,11 +35,9 @@ speechai_server/
 
 You must create a .env file in the project root containing at least these variables:
 OPENAI_API_KEY='sk-xxxxxxxxxxxxxxxxxxxxxxxxxxx'
-GOOGLE_APPLICATION_CREDENTIALS='/path/to/gcloud/credentials.json'
-FIREBASE_KEY='/path/to/firebase/service-account.json'
+GOOGLE_APPLICATION_CREDENTIALS='/path/to/gcloud/credentials.json' // Path to the JSON file with Google Cloud credentials (Speech-to-Text & TTS).
+FIREBASE_KEY='/path/to/firebase/service-account.json' // Path to the JSON file with Firebase Admin credentials (Realtime Database + Storage bucket).
 OPENAI_API_KEY: Your API key from OpenAI.
-GOOGLE_APPLICATION_CREDENTIALS: Path to the JSON file with Google Cloud credentials (Speech-to-Text & TTS).
-FIREBASE_KEY: Path to the JSON file with Firebase Admin credentials (Realtime Database + Storage bucket).
 
 Installation and Setup
 Clone the Repository
@@ -57,11 +55,6 @@ Cloning from the GitHub Web Interface:
 Navigate to the repository in your web browser.
 Click the green Code button (usually near the top-right).
 Choose HTTPS under "Clone" and either download the zip version or open in GitHub Desktop.
-
-Dependencys to install:
-npm install firebase-admin
-npm install -g nodemon
-npm install
 
 Create/Edit .env File
 Add your credentials in .env. Example:
