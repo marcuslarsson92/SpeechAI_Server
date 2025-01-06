@@ -298,6 +298,8 @@ app.post('/api/prompt', async (req, res) => {
 
       // Pass promptAfter to OpenAI
       const replyText = await promptutil.getOpenAIResponseText(promptAfter);
+
+      console.log('OpenAI Response:', replyText);
   
       // Synthesize TTS in the newly detected language
       const [ttsResponse] = await ttsClient.synthesizeSpeech({
@@ -348,45 +350,69 @@ app.post('/api/prompt', async (req, res) => {
   
   function mapFrancToTTS(code) {
     switch (code) {
-      case 'eng': return 'en-US'; 
-      case 'spa': return 'es-ES';
-      case 'deu': return 'de-DE';
-      case 'fra': return 'fr-FR';
-      case 'swe': return 'sv-SE';
-      case 'rus': return 'ru-RU';
-      case 'por': return 'pt-PT';
-      case 'pol': return 'pl-PL';
-      case 'hun': return 'hu-HU';
-      case 'ces':
-      case 'cze': return 'cs-CZ'; 
-      case 'ell': return 'el-GR';
-      case 'ita': return 'it-IT';
-      case 'srp': return 'sr-RS';
-      case 'slk':
-      case 'slo': return 'sk-SK';
-      case 'zho': return 'zh-CN';
-      case 'fin': return 'fi-FI';
-      case 'dan': return 'da-DK';
-      case 'nob':
-      case 'nor': return 'no-NO';
-      case 'nld': return 'nl-NL';
-      case 'ron':
-      case 'rum': return 'ro-RO';
-      case 'hrv': return 'hr-HR';
-      case 'bos': return 'bs-BA';
-      case 'slv': return 'sl-SI';
-      case 'lit': return 'lt-LT';
-      case 'lav': return 'lv-LV';
-      case 'est': return 'et-EE';
-      case 'isl': return 'is-IS';
-      case 'tur': return 'tr-TR';
-      case 'sqi':
-      case 'alb': return 'sq-AL';
-      case 'afr': return 'af-ZA';
-      default:
-        return null;  // return null so we know to fallback
+        // Existing mappings
+        case 'eng': 
+        case 'sco': 
+        case 'enm': 
+        case 'ang': 
+        case 'hbo': 
+        case 'nzs': 
+        case 'aus': 
+        case 'nze': 
+        case 'cpe': 
+        case 'jam': 
+        case 'bjn': 
+        case 'tok': 
+        case 'kea': 
+        case 'guy': 
+        case 'srm': 
+        case 'car': 
+        case 'can': 
+        case 'gla': 
+        case 'lvp': 
+        case 'wls': 
+        case 'ire': 
+        case 'zaf':
+            return 'en-US';
+        case 'spa': return 'es-ES';
+        case 'deu': return 'de-DE';
+        case 'fra': return 'fr-FR';
+        case 'swe': return 'sv-SE';
+        case 'rus': return 'ru-RU';
+        case 'por': return 'pt-PT';
+        case 'pol': return 'pl-PL';
+        case 'hun': return 'hu-HU';
+        case 'ces':
+        case 'cze': return 'cs-CZ'; 
+        case 'ell': return 'el-GR';
+        case 'ita': return 'it-IT';
+        case 'srp': return 'sr-RS';
+        case 'slk':
+        case 'slo': return 'sk-SK';
+        case 'zho': return 'zh-CN';
+        case 'fin': return 'fi-FI';
+        case 'dan': return 'da-DK';
+        case 'nob':
+        case 'nor': return 'no-NO';
+        case 'nld': return 'nl-NL';
+        case 'ron':
+        case 'rum': return 'ro-RO';
+        case 'hrv': return 'hr-HR';
+        case 'bos': return 'bs-BA';
+        case 'slv': return 'sl-SI';
+        case 'lit': return 'lt-LT';
+        case 'lav': return 'lv-LV';
+        case 'est': return 'et-EE';
+        case 'isl': return 'is-IS';
+        case 'tur': return 'tr-TR';
+        case 'sqi':
+        case 'alb': return 'sq-AL';
+        case 'afr': return 'af-ZA';
+        default:
+            return null;  // return null so we know to fallback
     }
-  }  
+}
+  
 
   // Endpoint to end a conversation
 app.post('/api/end-conversation', async (req, res) => {
